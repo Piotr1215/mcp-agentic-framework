@@ -4,7 +4,19 @@ import {
   ListToolsRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 import { toolDefinitions } from './toolDefinitions.js';
-import { registerAgent, unregisterAgent, discoverAgents, sendMessage, checkForMessages } from './tools.js';
+import { 
+  registerAgent, 
+  unregisterAgent, 
+  discoverAgents, 
+  sendMessage, 
+  checkForMessages,
+  updateAgentStatus,
+  subscribeToNotifications,
+  unsubscribeFromNotifications,
+  sendBroadcast,
+  getPendingNotifications,
+  setPushNotificationSender
+} from './tools.js';
 import { Errors, MCPError } from './errors.js';
 
 export function createServer() {
@@ -27,6 +39,20 @@ export function createServer() {
       },
     }
   );
+  
+  // Store reference to server instance for notifications
+  global.mcpServer = server;
+  
+  // Set up push notification sender
+  setPushNotificationSender(async (method, params) => {
+    try {
+      await server.notification({ method, params });
+      return true;
+    } catch (error) {
+      console.error('Failed to send push notification:', error);
+      return false;
+    }
+  });
 
   // Define available tools
   server.setRequestHandler(ListToolsRequestSchema, async () => ({
@@ -63,6 +89,31 @@ export function createServer() {
           return await checkForMessages(agent_id);
         }
 
+        case 'update-agent-status': {
+          const { agent_id, status } = args;
+          return await updateAgentStatus(agent_id, status);
+        }
+
+        case 'subscribe-to-notifications': {
+          const { agent_id, events } = args;
+          return await subscribeToNotifications(agent_id, events);
+        }
+
+        case 'unsubscribe-from-notifications': {
+          const { agent_id, events } = args;
+          return await unsubscribeFromNotifications(agent_id, events);
+        }
+
+        case 'send-broadcast': {
+          const { from, message, priority } = args;
+          return await sendBroadcast(from, message, priority);
+        }
+
+        case 'get-pending-notifications': {
+          const { agent_id } = args;
+          return await getPendingNotifications(agent_id);
+        }
+
         default:
           throw Errors.toolNotFound(name);
       }
@@ -78,4 +129,23 @@ export function createServer() {
   });
 
   return server;
+}
+
+// Function to send custom notifications
+export async function sendCustomNotification(method, params) {
+  if (!global.mcpServer) {
+    throw new Error('MCP server not initialized');
+  }
+  
+  try {
+    // Send notification without ID (per JSON-RPC spec)
+    await global.mcpServer.notification({
+      method,
+      params
+    });
+    return true;
+  } catch (error) {
+    console.error('Failed to send notification:', error);
+    return false;
+  }
 }

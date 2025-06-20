@@ -1,5 +1,6 @@
 import { createAgentRegistry } from './lib/agentRegistry.js';
 import { createMessageStore } from './lib/messageStore.js';
+import { createNotificationManager } from './lib/notificationManager.js';
 import { Errors, MCPError } from './errors.js';
 import { textResponse, structuredResponse, createMetadata } from './response-formatter.js';
 import * as path from 'path';
@@ -12,19 +13,28 @@ const AGENTS_STORAGE = path.join(STORAGE_DIR, 'agents.json');
 const MESSAGES_DIR = path.join(STORAGE_DIR, 'messages');
 
 // Create instances - these will be reset in tests
-let agentRegistry = createAgentRegistry(AGENTS_STORAGE);
-let messageStore = createMessageStore(MESSAGES_DIR);
+let notificationManager = createNotificationManager();
+let agentRegistry = createAgentRegistry(AGENTS_STORAGE, notificationManager);
+let messageStore = createMessageStore(MESSAGES_DIR, notificationManager);
+
+// Function to set push notification sender (called by server after initialization)
+export function setPushNotificationSender(sender) {
+  if (notificationManager && notificationManager.setPushNotificationSender) {
+    notificationManager.setPushNotificationSender(sender);
+  }
+}
 
 // Function to reset instances (for testing)
 export function resetInstances() {
   // Use unique paths for each reset in test mode
+  notificationManager = createNotificationManager();
   if (process.env.NODE_ENV === 'test') {
     const testDir = `/tmp/mcp-agentic-framework-test-${process.pid}-${Date.now()}`;
-    agentRegistry = createAgentRegistry(path.join(testDir, 'agents.json'));
-    messageStore = createMessageStore(path.join(testDir, 'messages'));
+    agentRegistry = createAgentRegistry(path.join(testDir, 'agents.json'), notificationManager);
+    messageStore = createMessageStore(path.join(testDir, 'messages'), notificationManager);
   } else {
-    agentRegistry = createAgentRegistry(AGENTS_STORAGE);
-    messageStore = createMessageStore(MESSAGES_DIR);
+    agentRegistry = createAgentRegistry(AGENTS_STORAGE, notificationManager);
+    messageStore = createMessageStore(MESSAGES_DIR, notificationManager);
   }
 }
 
@@ -189,6 +199,192 @@ export async function checkForMessages(agentId) {
     }
     
     return structuredResponse(formattedMessages, message, metadata);
+  } catch (error) {
+    if (error instanceof MCPError) {
+      throw error;
+    }
+    throw Errors.internalError(error.message);
+  }
+}
+
+/**
+ * Update agent status
+ */
+export async function updateAgentStatus(agentId, status) {
+  const startTime = Date.now();
+  
+  try {
+    // Update activity timestamp when changing status
+    await agentRegistry.updateAgentActivity(agentId);
+    
+    const result = await agentRegistry.updateAgentStatus(agentId, status);
+    const metadata = createMetadata(startTime, { 
+      tool: 'update-agent-status',
+      status 
+    });
+    
+    const message = result.success 
+      ? `Agent status updated from '${result.previousStatus}' to '${result.newStatus}'`
+      : result.message || 'Failed to update agent status';
+    
+    return structuredResponse(result, message, metadata);
+  } catch (error) {
+    if (error instanceof MCPError) {
+      throw error;
+    }
+    throw Errors.internalError(error.message);
+  }
+}
+
+/**
+ * Subscribe to notifications
+ */
+export async function subscribeToNotifications(agentId, events) {
+  const startTime = Date.now();
+  
+  try {
+    // Verify agent exists
+    const agent = await agentRegistry.getAgent(agentId);
+    if (!agent) {
+      throw Errors.resourceNotFound(`Agent not found: ${agentId}`);
+    }
+    
+    // For now, just acknowledge the subscription
+    // In a real implementation, this would set up SSE or WebSocket connections
+    const result = notificationManager.subscribe(agentId, events, (notification) => {
+      // This callback would be invoked when notifications are emitted
+      // In a real system, this would send the notification via SSE/WebSocket
+    });
+    
+    const metadata = createMetadata(startTime, { 
+      tool: 'subscribe-to-notifications',
+      events 
+    });
+    
+    return structuredResponse(
+      result,
+      `Agent '${agent.name}' subscribed to notifications: ${events.join(', ')}`,
+      metadata
+    );
+  } catch (error) {
+    if (error instanceof MCPError) {
+      throw error;
+    }
+    throw Errors.internalError(error.message);
+  }
+}
+
+/**
+ * Unsubscribe from notifications
+ */
+export async function unsubscribeFromNotifications(agentId, events = null) {
+  const startTime = Date.now();
+  
+  try {
+    // Verify agent exists
+    const agent = await agentRegistry.getAgent(agentId);
+    if (!agent) {
+      throw Errors.resourceNotFound(`Agent not found: ${agentId}`);
+    }
+    
+    const result = notificationManager.unsubscribe(agentId, events);
+    const metadata = createMetadata(startTime, { 
+      tool: 'unsubscribe-from-notifications' 
+    });
+    
+    const message = result.success
+      ? events 
+        ? `Agent '${agent.name}' unsubscribed from: ${events.join(', ')}`
+        : `Agent '${agent.name}' unsubscribed from all notifications`
+      : result.message || 'Failed to unsubscribe';
+    
+    return structuredResponse(result, message, metadata);
+  } catch (error) {
+    if (error instanceof MCPError) {
+      throw error;
+    }
+    throw Errors.internalError(error.message);
+  }
+}
+
+/**
+ * Send broadcast message
+ */
+export async function sendBroadcast(from, message, priority = 'normal') {
+  const startTime = Date.now();
+  
+  try {
+    // Verify sender exists
+    const fromAgent = await agentRegistry.getAgent(from);
+    if (!fromAgent) {
+      throw Errors.resourceNotFound(`Sender agent not found: ${from}`);
+    }
+    
+    const result = await messageStore.sendBroadcast(from, message, priority);
+    const metadata = createMetadata(startTime, { 
+      tool: 'send-broadcast',
+      priority 
+    });
+    
+    return structuredResponse(
+      result,
+      `Broadcast sent from ${fromAgent.name} with ${priority} priority`,
+      metadata
+    );
+  } catch (error) {
+    if (error instanceof MCPError) {
+      throw error;
+    }
+    throw Errors.internalError(error.message);
+  }
+}
+
+/**
+ * Get pending notifications
+ */
+export async function getPendingNotifications(agentId) {
+  const startTime = Date.now();
+  
+  try {
+    // Verify agent exists
+    const agent = await agentRegistry.getAgent(agentId);
+    if (!agent) {
+      throw Errors.resourceNotFound(`Agent not found: ${agentId}`);
+    }
+    
+    const notifications = notificationManager.getPendingNotifications(agentId);
+    const metadata = createMetadata(startTime, { 
+      tool: 'get-pending-notifications',
+      notificationCount: notifications.length 
+    });
+    
+    let message;
+    if (notifications.length > 0) {
+      const notificationList = notifications.map((notif, index) => {
+        const method = notif.method || 'unknown';
+        const params = notif.params || {};
+        let details = `${index + 1}. ${method}`;
+        
+        // Format based on notification type
+        if (method === 'broadcast/message') {
+          details += `\n   From: ${params.from || 'unknown'}\n   Message: ${params.message || 'no message'}\n   Priority: ${params.priority || 'normal'}`;
+        } else if (method === 'message/delivered') {
+          details += `\n   Message ID: ${params.messageId}\n   To: ${params.to}\n   From: ${params.from}`;
+        } else if (method === 'agent/registered') {
+          details += `\n   Agent: ${params.name} (${params.agentId})\n   Description: ${params.description}`;
+        } else {
+          details += '\n   ' + JSON.stringify(params, null, 2).replace(/\n/g, '\n   ');
+        }
+        
+        return details;
+      }).join('\n\n');
+      
+      message = `Retrieved ${notifications.length} pending notification${notifications.length === 1 ? '' : 's'} for agent '${agent.name}':\n\n${notificationList}`;
+    } else {
+      message = `No pending notifications for agent '${agent.name}'`;
+    }
+    
+    return structuredResponse(notifications, message, metadata);
   } catch (error) {
     if (error instanceof MCPError) {
       throw error;

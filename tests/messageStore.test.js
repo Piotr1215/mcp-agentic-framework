@@ -1,10 +1,12 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { createMessageStore } from '../src/lib/messageStore.js';
+import { createNotificationManager } from '../src/lib/notificationManager.js';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 
 describe('Message Store', () => {
   let store;
+  let notificationManager;
   const storageDir = '/tmp/mcp-agentic-test/test-messages';
 
   beforeEach(async () => {
@@ -14,7 +16,8 @@ describe('Message Store', () => {
     } catch (e) {
       // Directory might not exist
     }
-    store = createMessageStore(storageDir);
+    notificationManager = createNotificationManager();
+    store = createMessageStore(storageDir, notificationManager);
   });
 
   afterEach(async () => {
@@ -214,7 +217,7 @@ describe('Message Store', () => {
       await store.sendMessage('agent-1', 'agent-2', 'Persistent message');
       
       // Create new store instance
-      const newStore = createMessageStore(storageDir);
+      const newStore = createMessageStore(storageDir, notificationManager);
       const messages = await newStore.getAllMessages();
       
       expect(messages).toHaveLength(1);
@@ -256,6 +259,71 @@ describe('Message Store', () => {
       // Verify all messages exist
       const messages = await store.getAllMessages();
       expect(messages).toHaveLength(10);
+    });
+  });
+
+  describe('sendBroadcast', () => {
+    it('should send broadcast message successfully', async () => {
+      const result = await store.sendBroadcast('system', 'Server maintenance in 10 minutes', 'high');
+      
+      expect(result).toEqual({ success: true });
+    });
+
+    it('should emit broadcast notification', async () => {
+      const notifySpy = vi.spyOn(notificationManager, 'notifyBroadcast');
+      
+      await store.sendBroadcast('agent-1', 'Hello everyone', 'normal');
+      
+      expect(notifySpy).toHaveBeenCalledWith('agent-1', 'Hello everyone', 'normal');
+    });
+
+    it('should use default priority', async () => {
+      const notifySpy = vi.spyOn(notificationManager, 'notifyBroadcast');
+      
+      await store.sendBroadcast('agent-1', 'Hello everyone');
+      
+      expect(notifySpy).toHaveBeenCalledWith('agent-1', 'Hello everyone', 'normal');
+    });
+
+    it('should validate sender ID', async () => {
+      await expect(store.sendBroadcast('', 'Message')).rejects.toThrow('From agent ID is required');
+      await expect(store.sendBroadcast(null, 'Message')).rejects.toThrow('From agent ID is required');
+    });
+
+    it('should validate message content', async () => {
+      await expect(store.sendBroadcast('agent-1', '')).rejects.toThrow('Message content is required');
+      await expect(store.sendBroadcast('agent-1', null)).rejects.toThrow('Message content is required');
+    });
+  });
+
+  describe('notifications', () => {
+    it('should emit notification when message is sent', async () => {
+      const notifySpy = vi.spyOn(notificationManager, 'notifyMessageDelivered');
+      
+      const result = await store.sendMessage('agent-1', 'agent-2', 'Test message');
+      
+      expect(notifySpy).toHaveBeenCalledWith(
+        result.messageId,
+        'agent-2',
+        'agent-1'
+      );
+    });
+
+    it('should emit notification when message is marked as read', async () => {
+      const notifySpy = vi.spyOn(notificationManager, 'notifyMessageAcknowledged');
+      const { messageId } = await store.sendMessage('agent-1', 'agent-2', 'Test message');
+      
+      await store.markMessageAsRead(messageId);
+      
+      expect(notifySpy).toHaveBeenCalledWith(messageId, 'agent-2');
+    });
+
+    it('should not emit notification if message not found', async () => {
+      const notifySpy = vi.spyOn(notificationManager, 'notifyMessageAcknowledged');
+      
+      await store.markMessageAsRead('non-existent-id');
+      
+      expect(notifySpy).not.toHaveBeenCalled();
     });
   });
 });

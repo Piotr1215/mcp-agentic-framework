@@ -1,10 +1,12 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { createAgentRegistry } from '../src/lib/agentRegistry.js';
+import { createNotificationManager } from '../src/lib/notificationManager.js';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 
 describe('Agent Registry', () => {
   let registry;
+  let notificationManager;
   const storagePath = '/tmp/mcp-agentic-test/test-agents.json';
 
   beforeEach(async () => {
@@ -16,7 +18,8 @@ describe('Agent Registry', () => {
     } catch (e) {
       // File might not exist
     }
-    registry = createAgentRegistry(storagePath);
+    notificationManager = createNotificationManager();
+    registry = createAgentRegistry(storagePath, notificationManager);
   });
 
   afterEach(async () => {
@@ -43,11 +46,13 @@ describe('Agent Registry', () => {
       const agents = JSON.parse(data);
       
       expect(agents).toHaveProperty(result.id);
-      expect(agents[result.id]).toEqual({
+      expect(agents[result.id]).toMatchObject({
         id: result.id,
         name: 'TestAgent',
         description: 'A test agent',
-        registeredAt: expect.any(String)
+        status: 'online',
+        registeredAt: expect.any(String),
+        lastActivityAt: expect.any(String)
       });
     });
 
@@ -119,16 +124,18 @@ describe('Agent Registry', () => {
       const agents = await registry.discoverAgents();
       
       expect(agents).toHaveLength(2);
-      expect(agents).toContainEqual({
+      expect(agents).toContainEqual(expect.objectContaining({
         id: agent1.id,
         name: 'Agent1',
-        description: 'First agent'
-      });
-      expect(agents).toContainEqual({
+        description: 'First agent',
+        status: 'online'
+      }));
+      expect(agents).toContainEqual(expect.objectContaining({
         id: agent2.id,
         name: 'Agent2',
-        description: 'Second agent'
-      });
+        description: 'Second agent',
+        status: 'online'
+      }));
     });
 
     it('should not include unregistered agents', async () => {
@@ -155,11 +162,13 @@ describe('Agent Registry', () => {
       const { id } = await registry.registerAgent('TestAgent', 'A test agent');
       const agent = await registry.getAgent(id);
       
-      expect(agent).toEqual({
+      expect(agent).toMatchObject({
         id,
         name: 'TestAgent',
         description: 'A test agent',
-        registeredAt: expect.any(String)
+        status: 'online',
+        registeredAt: expect.any(String),
+        lastActivityAt: expect.any(String)
       });
     });
 
@@ -191,6 +200,141 @@ describe('Agent Registry', () => {
       const agents = await newRegistry.discoverAgents();
       
       expect(agents).toEqual([]);
+    });
+  });
+
+  describe('updateAgentStatus', () => {
+    it('should update agent status', async () => {
+      const { id } = await registry.registerAgent('TestAgent', 'A test agent');
+      
+      const result = await registry.updateAgentStatus(id, 'busy');
+      
+      expect(result).toEqual({
+        success: true,
+        previousStatus: 'online',
+        newStatus: 'busy'
+      });
+      
+      // Verify the status was updated
+      const agent = await registry.getAgent(id);
+      expect(agent.status).toBe('busy');
+    });
+
+    it('should validate status values', async () => {
+      const { id } = await registry.registerAgent('TestAgent', 'A test agent');
+      
+      await expect(registry.updateAgentStatus(id, 'invalid-status'))
+        .rejects.toThrow('Invalid status');
+    });
+
+    it('should return error for non-existent agent', async () => {
+      const result = await registry.updateAgentStatus('non-existent', 'offline');
+      
+      expect(result).toEqual({
+        success: false,
+        message: 'Agent not found'
+      });
+    });
+
+    it('should emit notification when status changes', async () => {
+      const notifySpy = vi.spyOn(notificationManager, 'notifyAgentStatusChange');
+      const { id } = await registry.registerAgent('TestAgent', 'A test agent');
+      
+      await registry.updateAgentStatus(id, 'offline');
+      
+      expect(notifySpy).toHaveBeenCalledWith(id, 'offline', {
+        previousStatus: 'online',
+        agentName: 'TestAgent'
+      });
+    });
+
+    it('should not emit notification if status unchanged', async () => {
+      const notifySpy = vi.spyOn(notificationManager, 'notifyAgentStatusChange');
+      const { id } = await registry.registerAgent('TestAgent', 'A test agent');
+      
+      // Status is already 'online' by default
+      await registry.updateAgentStatus(id, 'online');
+      
+      expect(notifySpy).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('updateAgentActivity', () => {
+    it('should update agent last activity timestamp', async () => {
+      const { id } = await registry.registerAgent('TestAgent', 'A test agent');
+      const agent1 = await registry.getAgent(id);
+      
+      // Wait a bit to ensure timestamp difference
+      await new Promise(resolve => setTimeout(resolve, 10));
+      
+      const result = await registry.updateAgentActivity(id);
+      
+      expect(result).toEqual({ success: true });
+      
+      const agent2 = await registry.getAgent(id);
+      expect(agent2.lastActivityAt).not.toBe(agent1.lastActivityAt);
+    });
+
+    it('should return false for non-existent agent', async () => {
+      const result = await registry.updateAgentActivity('non-existent');
+      
+      expect(result).toEqual({ success: false });
+    });
+  });
+
+  describe('getAgentsByStatus', () => {
+    it('should return agents with specific status', async () => {
+      const agent1 = await registry.registerAgent('Agent1', 'First agent');
+      const agent2 = await registry.registerAgent('Agent2', 'Second agent');
+      const agent3 = await registry.registerAgent('Agent3', 'Third agent');
+      
+      // Update statuses
+      await registry.updateAgentStatus(agent1.id, 'busy');
+      await registry.updateAgentStatus(agent2.id, 'offline');
+      
+      const onlineAgents = await registry.getAgentsByStatus('online');
+      const busyAgents = await registry.getAgentsByStatus('busy');
+      const offlineAgents = await registry.getAgentsByStatus('offline');
+      
+      expect(onlineAgents).toHaveLength(1);
+      expect(onlineAgents[0].name).toBe('Agent3');
+      
+      expect(busyAgents).toHaveLength(1);
+      expect(busyAgents[0].name).toBe('Agent1');
+      
+      expect(offlineAgents).toHaveLength(1);
+      expect(offlineAgents[0].name).toBe('Agent2');
+    });
+
+    it('should return empty array when no agents match status', async () => {
+      await registry.registerAgent('Agent1', 'First agent');
+      
+      const awayAgents = await registry.getAgentsByStatus('away');
+      
+      expect(awayAgents).toEqual([]);
+    });
+  });
+
+  describe('notifications', () => {
+    it('should emit notification when agent is registered', async () => {
+      const notifySpy = vi.spyOn(notificationManager, 'notifyAgentRegistered');
+      
+      const result = await registry.registerAgent('NewAgent', 'A new agent');
+      
+      expect(notifySpy).toHaveBeenCalledWith(
+        result.id,
+        'NewAgent',
+        'A new agent'
+      );
+    });
+
+    it('should emit notification when agent is unregistered', async () => {
+      const notifySpy = vi.spyOn(notificationManager, 'notifyAgentUnregistered');
+      const { id } = await registry.registerAgent('TestAgent', 'A test agent');
+      
+      await registry.unregisterAgent(id);
+      
+      expect(notifySpy).toHaveBeenCalledWith(id);
     });
   });
 });

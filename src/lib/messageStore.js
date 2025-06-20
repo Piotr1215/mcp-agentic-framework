@@ -125,7 +125,7 @@ const filterMessagesForAgent = (messages, agentId, options = {}) => {
 };
 
 // Main factory function
-export const createMessageStore = (storageDir) => {
+export const createMessageStore = (storageDir, notificationManager = null) => {
   // No locking needed since each message is in its own file
   
   const sendMessage = async (from, to, message) => {
@@ -137,6 +137,11 @@ export const createMessageStore = (storageDir) => {
     const messageObj = createMessage(id, from.trim(), to.trim(), message.trim());
     
     await saveMessage(storageDir, messageObj);
+    
+    // Emit notification if manager is available
+    if (notificationManager) {
+      await notificationManager.notifyMessageDelivered(id, to.trim(), from.trim());
+    }
     
     return { success: true, messageId: id };
   };
@@ -159,6 +164,11 @@ export const createMessageStore = (storageDir) => {
     message.read = true;
     await saveMessage(storageDir, message);
     
+    // Emit notification if manager is available
+    if (notificationManager) {
+      await notificationManager.notifyMessageAcknowledged(messageId, message.to);
+    }
+    
     return { success: true };
   };
 
@@ -176,11 +186,24 @@ export const createMessageStore = (storageDir) => {
     return { success: deleted };
   };
 
+  const sendBroadcast = async (from, message, priority = 'normal') => {
+    validateAgentId(from, 'From');
+    validateMessageContent(message);
+
+    // Emit notification if manager is available
+    if (notificationManager) {
+      await notificationManager.notifyBroadcast(from.trim(), message.trim(), priority);
+    }
+    
+    return { success: true };
+  };
+
   return {
     sendMessage,
     getMessagesForAgent,
     markMessageAsRead,
     getAllMessages,
-    deleteMessage
+    deleteMessage,
+    sendBroadcast
   };
 };

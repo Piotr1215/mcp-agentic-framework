@@ -11,11 +11,13 @@ const generateId = () => {
   return `agent-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 };
 
-const createAgent = (id, name, description) => ({
+const createAgent = (id, name, description, status = 'online') => ({
   id,
   name,
   description,
-  registeredAt: new Date().toISOString()
+  status,
+  registeredAt: new Date().toISOString(),
+  lastActivityAt: new Date().toISOString()
 });
 
 const validateAgentName = (name) => {
@@ -86,7 +88,7 @@ const createLock = () => {
 };
 
 // Main factory function
-export const createAgentRegistry = (storagePath) => {
+export const createAgentRegistry = (storagePath, notificationManager = null) => {
   const lock = createLock();
 
   const withLock = async (operation) => {
@@ -110,6 +112,11 @@ export const createAgentRegistry = (storagePath) => {
       agents[id] = agent;
       await saveAgents(storagePath, agents);
       
+      // Emit notification if manager is available
+      if (notificationManager) {
+        await notificationManager.notifyAgentRegistered(id, agent.name, agent.description);
+      }
+      
       return { id };
     });
   };
@@ -127,6 +134,11 @@ export const createAgentRegistry = (storagePath) => {
       delete agents[id];
       await saveAgents(storagePath, agents);
       
+      // Emit notification if manager is available
+      if (notificationManager) {
+        await notificationManager.notifyAgentUnregistered(id);
+      }
+      
       return { success: true };
     });
   };
@@ -134,10 +146,12 @@ export const createAgentRegistry = (storagePath) => {
   const discoverAgents = async () => {
     const agents = await loadAgents(storagePath);
     
-    return Object.values(agents).map(({ id, name, description }) => ({
+    return Object.values(agents).map(({ id, name, description, status, lastActivityAt }) => ({
       id,
       name,
-      description
+      description,
+      status,
+      lastActivityAt
     }));
   };
 
@@ -146,10 +160,76 @@ export const createAgentRegistry = (storagePath) => {
     return agents[id] || null;
   };
 
+  const updateAgentStatus = async (id, status) => {
+    validateAgentId(id);
+    
+    if (!['online', 'offline', 'busy', 'away'].includes(status)) {
+      throw new Error('Invalid status. Must be: online, offline, busy, or away');
+    }
+
+    return withLock(async () => {
+      const agents = await loadAgents(storagePath);
+      
+      if (!agents[id]) {
+        return { success: false, message: 'Agent not found' };
+      }
+      
+      const previousStatus = agents[id].status;
+      agents[id].status = status;
+      agents[id].lastActivityAt = new Date().toISOString();
+      
+      await saveAgents(storagePath, agents);
+      
+      // Emit notification if status changed
+      if (notificationManager && previousStatus !== status) {
+        await notificationManager.notifyAgentStatusChange(id, status, {
+          previousStatus,
+          agentName: agents[id].name
+        });
+      }
+      
+      return { success: true, previousStatus, newStatus: status };
+    });
+  };
+
+  const updateAgentActivity = async (id) => {
+    validateAgentId(id);
+
+    return withLock(async () => {
+      const agents = await loadAgents(storagePath);
+      
+      if (!agents[id]) {
+        return { success: false };
+      }
+      
+      agents[id].lastActivityAt = new Date().toISOString();
+      await saveAgents(storagePath, agents);
+      
+      return { success: true };
+    });
+  };
+
+  const getAgentsByStatus = async (status) => {
+    const agents = await loadAgents(storagePath);
+    
+    return Object.values(agents)
+      .filter(agent => agent.status === status)
+      .map(({ id, name, description, status, lastActivityAt }) => ({
+        id,
+        name,
+        description,
+        status,
+        lastActivityAt
+      }));
+  };
+
   return {
     registerAgent,
     unregisterAgent,
     discoverAgents,
-    getAgent
+    getAgent,
+    updateAgentStatus,
+    updateAgentActivity,
+    getAgentsByStatus
   };
 };

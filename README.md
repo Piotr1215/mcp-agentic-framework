@@ -58,9 +58,9 @@ npm test
 
 ## Usage with Claude Desktop
 
-### 1. Add to Claude Desktop Configuration
+### 1. Configure Claude Desktop
 
-The MCP agentic framework has been configured in Claude Desktop. The configuration is located in `~/.claude.json`:
+Add the MCP agentic framework to your Claude Desktop configuration file (`~/.claude.json`):
 
 ```json
 {
@@ -69,7 +69,7 @@ The MCP agentic framework has been configured in Claude Desktop. The configurati
       "type": "stdio",
       "command": "node",
       "args": [
-        "/home/decoder/dev/mcp-agentic-framework/src/index.js"
+        "/path/to/mcp-agentic-framework/src/index.js"
       ],
       "env": {}
     }
@@ -77,18 +77,52 @@ The MCP agentic framework has been configured in Claude Desktop. The configurati
 }
 ```
 
-**Note**: The configuration has already been added to `/home/decoder/.claude.json`. After restarting Claude Desktop, the agentic framework tools will be available.
+Replace `/path/to/mcp-agentic-framework` with the actual path to your installation.
 
-### 2. Restart Claude Desktop
+### 2. Understanding the Push Notification System
 
-After adding the configuration, restart Claude Desktop to load the new MCP server:
+**✅ Push Notifications Implemented**: The notification system now supports **true push notifications** using MCP's built-in notification capability. Here's how it works:
+
+1. **Events trigger immediate push**: When agents register, send messages, or broadcast, notifications are **immediately pushed** to all connected Claude instances
+2. **Real-time delivery**: Notifications are sent using MCP's JSON-RPC notification protocol (messages without request IDs)
+3. **Automatic reception**: Claude instances receive notifications in real-time without polling
+
+**Example workflow**:
+```
+Agent A: Registers as a new agent
+→ Push notification immediately sent to all connected Claude instances
+→ Other Claude instances receive: {"method": "agent/registered", "params": {...}}
+```
+
+**How it Works**:
+- When events occur (agent registration, messages, broadcasts), the server calls `server.notification()`
+- MCP sends these as JSON-RPC notifications (no request ID)
+- Connected clients (Claude instances) receive them in real-time
+- No polling required - notifications arrive immediately
+
+**Push Notification Types**:
+- `agent/registered` - New agent joins
+- `agent/unregistered` - Agent leaves  
+- `agent/statusChanged` - Agent status updates
+- `message/delivered` - Messages sent between agents
+- `broadcast/message` - System-wide broadcasts
+
+**Real-time Multi-Agent Collaboration**: Each Claude instance can now react immediately when:
+- New agents join the system
+- Messages are sent between agents
+- Broadcasts are made
+- Agent statuses change
+
+### 3. Restart Claude Desktop
+
+After adding the configuration, restart Claude Desktop:
 - Close Claude Desktop completely
 - Reopen Claude Desktop
 - The agentic framework tools should now be available
 
-### 3. Available Tools
+### 4. Available Tools
 
-The framework exposes five MCP tools:
+The framework exposes the following MCP tools:
 
 #### `register-agent`
 Register a new agent in the system.
@@ -182,6 +216,101 @@ Retrieve unread messages for an agent. Messages are automatically marked as read
 ]
 ```
 
+#### `update-agent-status`
+Update an agent's status (online, offline, busy, away).
+
+**Parameters:**
+- `agent_id` (string, required): Agent's ID
+- `status` (string, required): New status (one of: online, offline, busy, away)
+
+**Example:**
+```javascript
+{
+  "agent_id": "agent_abc123",
+  "status": "busy"
+}
+```
+
+#### `subscribe-to-notifications`
+Subscribe an agent to receive notifications for specific events.
+
+**Parameters:**
+- `agent_id` (string, required): Agent's ID
+- `events` (array, required): Array of event patterns to subscribe to
+
+**Event Patterns:**
+- `agent/*` - All agent-related events
+- `agent/registered` - New agent registrations
+- `agent/unregistered` - Agent unregistrations
+- `agent/statusChanged` - Agent status changes
+- `message/*` - All message-related events
+- `message/delivered` - Message deliveries
+- `message/acknowledged` - Message acknowledgments
+- `broadcast/*` - All broadcast events
+- `queue/*` - Queue status updates
+
+**Example:**
+```javascript
+{
+  "agent_id": "agent_abc123",
+  "events": ["agent/*", "broadcast/*"]
+}
+```
+
+#### `unsubscribe-from-notifications`
+Unsubscribe an agent from notifications.
+
+**Parameters:**
+- `agent_id` (string, required): Agent's ID
+- `events` (array, optional): Specific events to unsubscribe from. If not provided, unsubscribes from all.
+
+**Example:**
+```javascript
+{
+  "agent_id": "agent_abc123",
+  "events": ["agent/*"]
+}
+```
+
+#### `send-broadcast`
+Send a broadcast message to all agents.
+
+**Parameters:**
+- `from` (string, required): Sender agent's ID
+- `message` (string, required): Broadcast message content
+- `priority` (string, optional): Priority level (low, normal, high). Defaults to 'normal'
+
+**Example:**
+```javascript
+{
+  "from": "agent_system",
+  "message": "Server maintenance scheduled for 10 PM",
+  "priority": "high"
+}
+```
+
+#### `get-pending-notifications`
+Retrieve pending notifications for an agent. Notifications are cleared after retrieval.
+
+**Parameters:**
+- `agent_id` (string, required): Agent's ID
+
+**Response:**
+```javascript
+[
+  {
+    "jsonrpc": "2.0",
+    "method": "agent/registered",
+    "params": {
+      "agentId": "agent_xyz789",
+      "name": "NewAgent",
+      "description": "A newly registered agent",
+      "timestamp": "2024-01-20T10:35:00.000Z"
+    }
+  }
+]
+```
+
 ## Example Workflows
 
 ### Using with Claude Desktop
@@ -194,6 +323,19 @@ Once the server is configured and Claude Desktop is restarted, you can use natur
 "Send a message from developer to tester asking them to test the auth module"
 "Check messages for the tester agent"
 ```
+
+### Notification Example
+
+Here's how agents can react to events using the notification system:
+
+```
+"Register an observer agent that monitors system activity"
+"Subscribe the observer to all agent events"
+"Register a new developer agent"
+"Check pending notifications for the observer"
+```
+
+The observer will receive a notification that a new agent was registered!
 
 ### Programmatic Example
 
@@ -238,6 +380,43 @@ await sendMessage(
 );
 ```
 
+### Notification-Based Collaboration
+
+Here's how agents can react to events in real-time:
+
+```javascript
+// 1. Create a monitoring agent that watches for new agents
+const monitor = await registerAgent("MonitorAgent", "Monitors system activity");
+await subscribeToNotifications(monitor.id, ["agent/*", "broadcast/*"]);
+
+// 2. Create a team lead agent
+const teamLead = await registerAgent("TeamLeadAgent", "Manages the team");
+
+// 3. Monitor gets notified about the new team lead
+const notifications = await getPendingNotifications(monitor.id);
+// Receives: agent/registered notification for TeamLeadAgent
+
+// 4. Team lead sends a broadcast
+await sendBroadcast(
+  teamLead.id,
+  "Team meeting at 3 PM to discuss new features",
+  "high"
+);
+
+// 5. Monitor receives the broadcast
+const moreNotifications = await getPendingNotifications(monitor.id);
+// Receives: broadcast/message notification
+
+// 6. Multiple agents can subscribe to specific events
+const qaAgent = await registerAgent("QAAgent", "Quality assurance");
+await subscribeToNotifications(qaAgent.id, ["message/delivered"]);
+
+// Now QA gets notified whenever messages are sent
+await sendMessage(developer.id, qaAgent.id, "New build ready for testing");
+const qaNotifications = await getPendingNotifications(qaAgent.id);
+// Receives: message/delivered notification
+```
+
 ## Development
 
 ### Running Tests
@@ -259,30 +438,50 @@ npm run test:coverage
 mcp-agentic-framework/
 ├── src/
 │   ├── lib/
-│   │   ├── agentRegistry.js    # Agent registration logic
-│   │   ├── messageStore.js     # Message storage logic
-│   │   └── fileLock.js         # File locking for concurrency
-│   ├── tools.js                # Tool implementations
-│   ├── toolDefinitions.js      # MCP tool schemas
-│   ├── server.js               # MCP server setup
-│   ├── errors.js               # Error handling
-│   ├── response-formatter.js   # Response formatting
-│   └── index.js                # Entry point
+│   │   ├── agentRegistry.js        # Agent registration logic
+│   │   ├── messageStore.js         # Message storage logic
+│   │   ├── notificationManager.js  # Event-based notifications
+│   │   └── fileLock.js            # File locking for concurrency
+│   ├── tools.js                    # Tool implementations
+│   ├── toolDefinitions.js          # MCP tool schemas
+│   ├── server.js                   # MCP server setup
+│   ├── errors.js                   # Error handling
+│   ├── response-formatter.js       # Response formatting
+│   ├── index.js                    # Entry point (stdio)
+│   ├── http-server.js              # HTTP server variant
+│   ├── http-server-direct.js       # Direct HTTP server
+│   └── http-server-simple.js       # Simple HTTP server
 ├── tests/
-│   ├── agentRegistry.test.js   # Registry unit tests
-│   ├── messageStore.test.js    # Store unit tests
-│   ├── tools.test.js           # Tool integration tests
-│   ├── server.test.js          # Server tests
-│   └── e2e.test.js            # End-to-end tests
+│   ├── agentRegistry.test.js       # Registry unit tests
+│   ├── messageStore.test.js        # Store unit tests
+│   ├── notificationManager.test.js # Notification tests
+│   ├── notificationTools.test.js   # Notification integration tests
+│   ├── tools.test.js               # Tool integration tests
+│   ├── server.test.js              # Server tests
+│   └── e2e.test.js                # End-to-end tests
 └── package.json
 ```
+
+### Alternative Server Modes
+
+The framework includes several server implementations:
+
+1. **stdio mode** (`npm start`) - Standard MCP server for Claude Desktop
+2. **HTTP Direct** (`npm run start:http`) - Simple HTTP API at port 3113
+3. **HTTP Simple** (`npm run start:http:simple`) - Basic HTTP server
+4. **HTTP Advanced** (`npm run start:http:advanced`) - With SSE support (experimental)
+
+These HTTP servers are useful for:
+- Testing and debugging
+- Integration with non-MCP clients
+- Building custom notification systems
 
 ### Storage
 
 The framework stores data in `/tmp/mcp-agentic-framework/`:
-- `agents.json`: Registered agents
-- `messages.json`: Message history
-- Lock files for concurrency control
+- `agents.json`: Registered agents  
+- `messages/*.json`: Individual message files
+- Notification state is maintained in memory
 
 ### Security Considerations
 
