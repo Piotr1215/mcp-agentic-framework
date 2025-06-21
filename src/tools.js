@@ -338,15 +338,21 @@ export async function sendBroadcast(from, message, priority = 'normal') {
       throw Errors.resourceNotFound(`Sender agent not found: ${from}`);
     }
     
-    const result = await messageStore.sendBroadcast(from, message, priority);
+    // Pass agentRegistry to enable actual message delivery
+    const result = await messageStore.sendBroadcast(from, message, priority, agentRegistry);
     const metadata = createMetadata(startTime, { 
       tool: 'send-broadcast',
-      priority 
+      priority,
+      recipientCount: result.recipientCount
     });
+    
+    const statusMessage = result.recipientCount > 0
+      ? `Broadcast sent from ${fromAgent.name} to ${result.recipientCount} agent${result.recipientCount === 1 ? '' : 's'} with ${priority} priority`
+      : `Broadcast sent from ${fromAgent.name} with ${priority} priority (no recipients)`;
     
     return structuredResponse(
       result,
-      `Broadcast sent from ${fromAgent.name} with ${priority} priority`,
+      statusMessage,
       metadata
     );
   } catch (error) {

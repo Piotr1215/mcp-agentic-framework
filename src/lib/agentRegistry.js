@@ -223,6 +223,19 @@ export const createAgentRegistry = (storagePath, notificationManager = null) => 
       }));
   };
 
+  const getAllAgents = async () => {
+    const agents = await loadAgents(storagePath);
+    
+    return Object.values(agents)
+      .map(({ id, name, description, status, lastActivityAt }) => ({
+        id,
+        name,
+        description,
+        status,
+        lastActivityAt
+      }));
+  };
+
   return {
     registerAgent,
     unregisterAgent,
@@ -230,6 +243,7 @@ export const createAgentRegistry = (storagePath, notificationManager = null) => 
     getAgent,
     updateAgentStatus,
     updateAgentActivity,
-    getAgentsByStatus
+    getAgentsByStatus,
+    getAllAgents
   };
 };

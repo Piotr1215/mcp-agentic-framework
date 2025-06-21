@@ -266,7 +266,8 @@ describe('Message Store', () => {
     it('should send broadcast message successfully', async () => {
       const result = await store.sendBroadcast('system', 'Server maintenance in 10 minutes', 'high');
       
-      expect(result).toEqual({ success: true });
+      expect(result.success).toBe(true);
+      expect(result.recipientCount).toBe(0); // No agentRegistry provided
     });
 
     it('should emit broadcast notification', async () => {

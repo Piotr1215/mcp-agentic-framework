@@ -186,16 +186,69 @@ export const createMessageStore = (storageDir, notificationManager = null) => {
     return { success: deleted };
   };
 
-  const sendBroadcast = async (from, message, priority = 'normal') => {
+  const sendBroadcast = async (from, message, priority = 'normal', agentRegistry = null) => {
     validateAgentId(from, 'From');
     validateMessageContent(message);
 
-    // Emit notification if manager is available
+    let recipientCount = 0;
+    const errors = [];
+
+    // If agentRegistry is provided, send actual messages to all agents
+    if (agentRegistry) {
+      try {
+        // Get all registered agents
+        const allAgents = await agentRegistry.getAllAgents();
+        
+        // Filter out the sender using functional approach
+        const recipients = allAgents.filter(agent => agent.id !== from.trim());
+        
+        // Send message to each recipient using functional map
+        const sendPromises = recipients.map(async (agent) => {
+          try {
+            // Create broadcast message with metadata
+            const broadcastMessage = `[BROADCAST ${priority.toUpperCase()}] ${message}`;
+            await sendMessage(from, agent.id, broadcastMessage);
+            return { success: true, agentId: agent.id };
+          } catch (error) {
+            return { success: false, agentId: agent.id, error: error.message };
+          }
+        });
+        
+        // Wait for all messages to be sent
+        const results = await Promise.all(sendPromises);
+        
+        // Count successes and collect errors functionally
+        const { successes, failures } = results.reduce(
+          (acc, result) => {
+            if (result.success) {
+              acc.successes++;
+            } else {
+              acc.failures.push(result);
+            }
+            return acc;
+          },
+          { successes: 0, failures: [] }
+        );
+        
+        recipientCount = successes;
+        if (failures.length > 0) {
+          failures.forEach(f => errors.push(`Failed to send to ${f.agentId}: ${f.error}`));
+        }
+      } catch (error) {
+        errors.push(`Failed to get agent list: ${error.message}`);
+      }
+    }
+
+    // Still emit notification for any listeners
     if (notificationManager) {
       await notificationManager.notifyBroadcast(from.trim(), message.trim(), priority);
     }
     
-    return { success: true };
+    return { 
+      success: errors.length === 0,
+      recipientCount,
+      errors: errors.length > 0 ? errors : undefined
+    };
   };
 
   return {
