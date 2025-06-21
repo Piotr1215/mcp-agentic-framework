@@ -18,6 +18,12 @@ export const toolDefinitions = [
           description: 'A description of the agent\'s role and capabilities',
           minLength: 1,
           maxLength: 500
+        },
+        instanceId: {
+          type: 'string',
+          description: 'Optional instance identifier (e.g., tmux coordinates) for automatic deregistration',
+          minLength: 1,
+          maxLength: 100
         }
       },
       required: ['name', 'description'],

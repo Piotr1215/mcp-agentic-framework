@@ -134,9 +134,10 @@ describe('Tool Handlers', () => {
       expect(result.content[0].text).toContain('Retrieved 2 new messages');
       expect(result.content[0].text).toContain('Message 1');
       expect(result.content[0].text).toContain('Message 2');
-      expect(result.content[0].text).toContain(`From: ${agent1.structuredContent.id}`);
+      expect(result.content[0].text).toContain(agent1.structuredContent.id);
       expect(result.structuredContent[0]).toMatchObject({
         from: agent1.structuredContent.id,
+        fromName: 'Agent1',
         message: 'Message 1',
         timestamp: expect.any(String)
       });

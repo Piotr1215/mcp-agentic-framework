@@ -77,6 +77,28 @@ Add the MCP agentic framework to your Claude Desktop configuration file (`~/.cla
 }
 ```
 
+### Alternative: Using Streamable HTTP Transport
+
+You can also configure Claude Desktop to use the HTTP transport with the MCP agentic framework:
+
+```json
+{
+  "mcpServers": {
+    "agentic-framework": {
+      "type": "http",
+      "url": "http://127.0.0.1:3113/mcp"
+    }
+  }
+}
+```
+
+To use the HTTP transport:
+1. Start the HTTP server: `npm run start:http`
+2. Add the above configuration to your `~/.claude.json`
+3. Restart Claude Desktop
+
+**Note**: The Streamable HTTP transport supports Server-Sent Events (SSE) for real-time push notifications and is ideal for scenarios where you want the server to run independently of Claude Desktop.
+
 Replace `/path/to/mcp-agentic-framework` with the actual path to your installation.
 
 ### 2. Understanding the Push Notification System
@@ -475,6 +497,29 @@ These HTTP servers are useful for:
 - Testing and debugging
 - Integration with non-MCP clients
 - Building custom notification systems
+
+#### Managing the HTTP Server
+
+The HTTP server can be managed using the included server manager script:
+
+```bash
+# Check server status
+./scripts/mcp-server-manager.sh status
+
+# Start server in dedicated tmux session
+./scripts/mcp-server-manager.sh start
+
+# View server logs (attach to tmux session)
+./scripts/mcp-server-manager.sh logs
+
+# Stop server
+./scripts/mcp-server-manager.sh stop
+
+# Restart server
+./scripts/mcp-server-manager.sh restart
+```
+
+When using the Claude wrapper script (`__claude_with_monitor.sh`), the HTTP server will automatically start in a dedicated tmux session named `claude-server-{RAND}` if not already running. This allows you to monitor server logs in real-time.
 
 ### Storage
 

@@ -66,8 +66,8 @@ export function createServer() {
     try {
       switch (name) {
         case 'register-agent': {
-          const { name: agentName, description } = args;
-          return await registerAgent(agentName, description);
+          const { name: agentName, description, instanceId } = args;
+          return await registerAgent(agentName, description, instanceId);
         }
 
         case 'unregister-agent': {

@@ -193,6 +193,69 @@ app.post('/mcp', async (req, res) => {
   }
 });
 
+// Instance management endpoints
+app.delete('/instance/:instanceId', async (req, res) => {
+  try {
+    const { instanceId } = req.params;
+    console.log(`Deregistering agent for instance: ${instanceId}`);
+    
+    // Import the function we need
+    const { unregisterAgentByInstance } = await import('./tools.js');
+    
+    const result = await unregisterAgentByInstance(instanceId);
+    
+    if (result.structuredContent.success) {
+      res.json({
+        success: true,
+        message: result.content[0].text,
+        agentId: result.structuredContent.agentId,
+        agentName: result.structuredContent.agentName
+      });
+    } else {
+      res.status(404).json({
+        success: false,
+        message: result.content[0].text
+      });
+    }
+  } catch (error) {
+    console.error('Error deregistering by instance:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+app.get('/instance/:instanceId', async (req, res) => {
+  try {
+    const { instanceId } = req.params;
+    
+    // Import the instance tracker
+    const { createInstanceTracker } = await import('./lib/instanceTracker.js');
+    const instanceTracker = createInstanceTracker();
+    
+    const mapping = await instanceTracker.getAgentByInstance(instanceId);
+    
+    if (mapping) {
+      res.json({
+        success: true,
+        ...mapping
+      });
+    } else {
+      res.status(404).json({
+        success: false,
+        message: `No agent found for instance: ${instanceId}`
+      });
+    }
+  } catch (error) {
+    console.error('Error getting instance mapping:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
 // Health check endpoint
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', name: 'mcp-agentic-framework', version: '1.0.0' });
@@ -204,7 +267,11 @@ app.get('/', (req, res) => {
     message: 'MCP Agentic Framework HTTP Server',
     endpoints: {
       mcp: '/mcp',
-      health: '/health'
+      health: '/health',
+      instance: {
+        get: '/instance/:instanceId',
+        delete: '/instance/:instanceId'
+      }
     }
   });
 });

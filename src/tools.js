@@ -1,6 +1,7 @@
 import { createAgentRegistry } from './lib/agentRegistry.js';
 import { createMessageStore } from './lib/messageStore.js';
 import { createNotificationManager } from './lib/notificationManager.js';
+import { createInstanceTracker } from './lib/instanceTracker.js';
 import { Errors, MCPError } from './errors.js';
 import { textResponse, structuredResponse, createMetadata } from './response-formatter.js';
 import * as path from 'path';
@@ -16,6 +17,7 @@ const MESSAGES_DIR = path.join(STORAGE_DIR, 'messages');
 let notificationManager = createNotificationManager();
 let agentRegistry = createAgentRegistry(AGENTS_STORAGE, notificationManager);
 let messageStore = createMessageStore(MESSAGES_DIR, notificationManager);
+let instanceTracker = createInstanceTracker();
 
 // Function to set push notification sender (called by server after initialization)
 export function setPushNotificationSender(sender) {
@@ -41,16 +43,25 @@ export function resetInstances() {
 /**
  * Register a new agent
  */
-export async function registerAgent(name, description) {
+export async function registerAgent(name, description, instanceId = null) {
   const startTime = Date.now();
   
   try {
     const result = await agentRegistry.registerAgent(name, description);
-    const metadata = createMetadata(startTime, { tool: 'register-agent' });
+    
+    // Track instance if provided
+    if (instanceId) {
+      await instanceTracker.trackInstance(instanceId, result.id, name);
+    }
+    
+    const metadata = createMetadata(startTime, { 
+      tool: 'register-agent',
+      instanceTracked: !!instanceId 
+    });
     
     return structuredResponse(
       result,
-      `Agent '${name}' registered successfully with ID: ${result.id}`,
+      `Agent '${name}' registered successfully with ID: ${result.id}${instanceId ? ' (instance tracked)' : ''}`,
       metadata
     );
   } catch (error) {
@@ -170,11 +181,18 @@ export async function checkForMessages(agentId) {
     // Get unread messages
     const messages = await messageStore.getMessagesForAgent(agentId, { unreadOnly: true });
     
-    // Format messages for response before deletion
-    const formattedMessages = messages.map(msg => ({
-      from: msg.from,
-      message: msg.message,
-      timestamp: msg.timestamp
+    // Format messages for response before deletion, including sender names
+    const formattedMessages = await Promise.all(messages.map(async msg => {
+      // Try to get the sender's name
+      const senderAgent = await agentRegistry.getAgent(msg.from);
+      const senderName = senderAgent ? senderAgent.name : msg.from;
+      
+      return {
+        from: msg.from,
+        fromName: senderName,
+        message: msg.message,
+        timestamp: msg.timestamp
+      };
     }));
     
     // Delete messages after successful processing
@@ -193,7 +211,7 @@ export async function checkForMessages(agentId) {
     } else {
       // Include message details in the text response
       const messageList = formattedMessages.map((msg, index) => 
-        `Message ${index + 1}:\n  From: ${msg.from}\n  Content: ${msg.message}\n  Time: ${new Date(msg.timestamp).toLocaleString()}`
+        `Message ${index + 1}:\n  From: ${msg.fromName} (${msg.from})\n  Content: ${msg.message}\n  Time: ${new Date(msg.timestamp).toLocaleString()}`
       ).join('\n\n');
       message = `Retrieved ${formattedMessages.length} new message${formattedMessages.length === 1 ? '' : 's'} for agent '${agent.name}':\n\n${messageList}`;
     }
@@ -385,6 +403,53 @@ export async function getPendingNotifications(agentId) {
     }
     
     return structuredResponse(notifications, message, metadata);
+  } catch (error) {
+    if (error instanceof MCPError) {
+      throw error;
+    }
+    throw Errors.internalError(error.message);
+  }
+}
+
+/**
+ * Unregister agent by instance ID
+ */
+export async function unregisterAgentByInstance(instanceId) {
+  const startTime = Date.now();
+  
+  try {
+    // Look up agent by instance
+    const mapping = await instanceTracker.getAgentByInstance(instanceId);
+    
+    if (!mapping) {
+      return structuredResponse(
+        { success: false },
+        `No agent found for instance: ${instanceId}`,
+        createMetadata(startTime, { tool: 'unregister-agent-by-instance' })
+      );
+    }
+    
+    // Unregister the agent
+    const result = await agentRegistry.unregisterAgent(mapping.agentId);
+    
+    // Remove instance tracking
+    await instanceTracker.untrackInstance(instanceId);
+    
+    const metadata = createMetadata(startTime, { 
+      tool: 'unregister-agent-by-instance',
+      agentId: mapping.agentId,
+      agentName: mapping.agentName
+    });
+    
+    const message = result.success 
+      ? `Agent '${mapping.agentName}' (${mapping.agentId}) unregistered successfully for instance ${instanceId}`
+      : `Failed to unregister agent for instance ${instanceId}`;
+    
+    return structuredResponse(
+      { ...result, agentId: mapping.agentId, agentName: mapping.agentName },
+      message,
+      metadata
+    );
   } catch (error) {
     if (error instanceof MCPError) {
       throw error;
