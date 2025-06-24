@@ -21,6 +21,7 @@ const port = process.env.PORT || 3113;
 // Middleware
 app.use(express.json());
 app.use(cors());
+app.use(express.static('public'));
 
 // Session storage
 const sessions = new Map();
@@ -261,6 +262,60 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok', name: 'mcp-agentic-framework', version: '1.0.0' });
 });
 
+// Monitor endpoint - get all messages without deleting them
+app.get('/monitor/messages', async (req, res) => {
+  try {
+    const { createMessageStore } = await import('./lib/messageStore.js');
+    const messageStore = createMessageStore('/tmp/mcp-agentic-framework/messages');
+    const messages = await messageStore.getAllMessages();
+    res.json({
+      success: true,
+      messages,
+      count: messages.length
+    });
+  } catch (error) {
+    console.error('Error fetching messages for monitor:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// Cleanup old messages endpoint
+app.delete('/monitor/cleanup', async (req, res) => {
+  try {
+    const { olderThanHours = 24 } = req.query;
+    const cutoffTime = new Date(Date.now() - (olderThanHours * 60 * 60 * 1000));
+    
+    const { createMessageStore } = await import('./lib/messageStore.js');
+    const messageStore = createMessageStore('/tmp/mcp-agentic-framework/messages');
+    const messages = await messageStore.getAllMessages();
+    
+    let deletedCount = 0;
+    for (const msg of messages) {
+      if (new Date(msg.timestamp) < cutoffTime) {
+        await messageStore.deleteMessage(msg.id);
+        deletedCount++;
+      }
+    }
+    
+    res.json({
+      success: true,
+      deletedCount,
+      totalMessages: messages.length,
+      cutoffTime: cutoffTime.toISOString()
+    });
+  } catch (error) {
+    console.error('Error cleaning up messages:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+
 // Root endpoint for debugging
 app.get('/', (req, res) => {
   res.json({ 
@@ -271,6 +326,10 @@ app.get('/', (req, res) => {
       instance: {
         get: '/instance/:instanceId',
         delete: '/instance/:instanceId'
+      },
+      monitor: {
+        messages: '/monitor/messages',
+        cleanup: '/monitor/cleanup'
       }
     }
   });

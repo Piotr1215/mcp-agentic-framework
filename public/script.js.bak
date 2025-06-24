@@ -1,0 +1,527 @@
+// MCP Agent Chat - Single Chat View
+const MCP_SERVER_URL = 'http://127.0.0.1:3113/mcp';
+
+// Application State
+const state = {
+    mcpSessionId: null,
+    agents: [],
+    selectedAgentId: null,
+    selectedAgentView: null, // Which agent's perspective we're viewing
+    messages: {}, // Messages organized by agent ID
+    processedMessageIds: new Set(),
+    pollingInterval: null
+};
+
+// DOM Elements
+const elements = {
+    // Sidebars
+    agentList: document.getElementById('agentList'),
+    systemLog: document.getElementById('systemLog'),
+    activeAgentInfo: document.getElementById('activeAgentInfo'),
+    
+    // Chat area
+    chatHeader: document.getElementById('chatHeader'),
+    messagesContainer: document.getElementById('messagesContainer'),
+    messageInputContainer: document.getElementById('messageInputContainer'),
+    messageInput: document.getElementById('messageInput'),
+    
+    // Controls
+    newAgentButton: document.getElementById('newAgentButton'),
+    refreshAgentsButton: document.getElementById('refreshAgentsButton'),
+    sendButton: document.getElementById('sendButton'),
+    broadcastToggle: document.getElementById('broadcastToggle'),
+    recipientSelect: document.getElementById('recipientSelect'),
+    
+    // Modal
+    newAgentModal: document.getElementById('newAgentModal'),
+    newAgentName: document.getElementById('newAgentName'),
+    newAgentDescription: document.getElementById('newAgentDescription'),
+    createAgentButton: document.getElementById('createAgentButton'),
+    cancelAgentButton: document.getElementById('cancelAgentButton')
+};
+
+// Utility Functions
+function log(message, type = 'info') {
+    const timestamp = new Date().toLocaleTimeString();
+    const logEntry = `[${timestamp}] ${type.toUpperCase()}: ${message}`;
+    elements.systemLog.textContent = logEntry + '\n' + elements.systemLog.textContent;
+    
+    // Keep log size manageable
+    const lines = elements.systemLog.textContent.split('\n');
+    if (lines.length > 100) {
+        elements.systemLog.textContent = lines.slice(0, 100).join('\n');
+    }
+}
+
+function generateAvatar(name) {
+    if (!name) return '?';
+    const words = name.trim().split(/\s+/);
+    if (words.length === 1) return words[0].charAt(0).toUpperCase();
+    return (words[0].charAt(0) + words[words.length - 1].charAt(0)).toUpperCase();
+}
+
+function formatTime(timestamp) {
+    const date = new Date(timestamp);
+    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
+// MCP Communication
+async function callMcp(method, params = {}) {
+    const request = {
+        jsonrpc: '2.0',
+        id: Date.now(),
+        method,
+        params
+    };
+    
+    const headers = {
+        'Content-Type': 'application/json'
+    };
+    
+    if (state.mcpSessionId) {
+        headers['Mcp-Session-Id'] = state.mcpSessionId;
+    }
+    
+    try {
+        const response = await fetch(MCP_SERVER_URL, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify(request)
+        });
+        
+        const data = await response.json();
+        
+        if (data.error) {
+            throw new Error(data.error.message || 'MCP Error');
+        }
+        
+        return data.result;
+    } catch (error) {
+        log(`MCP Error: ${error.message}`, 'error');
+        throw error;
+    }
+}
+
+// Initialize MCP
+async function initializeMcp() {
+    try {
+        const result = await callMcp('initialize', {
+            protocolVersion: '2024-11-05',
+            clientInfo: {
+                name: 'mcp-web-ui',
+                version: '2.0.0'
+            }
+        });
+        
+        state.mcpSessionId = `web-${Date.now()}`;
+        log('MCP session initialized', 'success');
+        return true;
+    } catch (error) {
+        log('Failed to initialize MCP session', 'error');
+        return false;
+    }
+}
+
+// Agent Management
+async function createAgent() {
+    const name = elements.newAgentName.value.trim();
+    const description = elements.newAgentDescription.value.trim();
+    
+    if (!name || !description) {
+        log('Name and description are required', 'warning');
+        return;
+    }
+    
+    try {
+        elements.createAgentButton.disabled = true;
+        elements.createAgentButton.textContent = 'Creating...';
+        
+        const result = await callMcp('tools/call', {
+            name: 'register-agent',
+            arguments: { name, description }
+        });
+        
+        log(`Agent "${name}" created successfully`, 'success');
+        
+        // Clear form and close modal
+        elements.newAgentName.value = '';
+        elements.newAgentDescription.value = '';
+        elements.newAgentModal.style.display = 'none';
+        
+        // Refresh agents and select the new one
+        await refreshAgents();
+        if (result.id) {
+            selectAgent(result.id, result.id);
+        }
+    } catch (error) {
+        log('Failed to create agent', 'error');
+    } finally {
+        elements.createAgentButton.disabled = false;
+        elements.createAgentButton.textContent = 'Create';
+    }
+}
+
+async function refreshAgents() {
+    try {
+        const agents = await callMcp('tools/call', {
+            name: 'discover-agents',
+            arguments: {}
+        });
+        
+        if (Array.isArray(agents)) {
+            state.agents = agents;
+            renderAgentList();
+            updateRecipientSelect();
+            log(`Found ${agents.length} agents`, 'info');
+        }
+    } catch (error) {
+        log('Failed to discover agents', 'error');
+    }
+}
+
+function renderAgentList() {
+    if (state.agents.length === 0) {
+        elements.agentList.innerHTML = '<div class="empty-agents">No agents yet</div>';
+        return;
+    }
+    
+    elements.agentList.innerHTML = state.agents.map(agent => `
+        <div class="agent-item ${agent.id === state.selectedAgentView ? 'active' : ''}" 
+             data-agent-id="${agent.id}">
+            <div class="agent-avatar">${generateAvatar(agent.name)}</div>
+            <div class="agent-details">
+                <div class="agent-name">${agent.name}</div>
+                <div class="agent-status">
+                    <span class="status-dot ${agent.status}"></span>
+                    ${agent.status}
+                </div>
+            </div>
+        </div>
+    `).join('');
+    
+    // Add click handlers
+    elements.agentList.querySelectorAll('.agent-item').forEach(item => {
+        item.addEventListener('click', () => {
+            const agentId = item.dataset.agentId;
+            const agent = state.agents.find(a => a.id === agentId);
+            if (agent) {
+                selectAgent(agentId, state.selectedAgentId || agentId);
+            }
+        });
+    });
+}
+
+function selectAgent(viewAgentId, actAsAgentId) {
+    state.selectedAgentView = viewAgentId;
+    state.selectedAgentId = actAsAgentId;
+    
+    renderAgentList();
+    renderChatView();
+    updateActiveAgentInfo();
+    
+    // Show message input
+    elements.messageInputContainer.style.display = 'block';
+}
+
+function updateActiveAgentInfo() {
+    const viewAgent = state.agents.find(a => a.id === state.selectedAgentView);
+    const actAgent = state.agents.find(a => a.id === state.selectedAgentId);
+    
+    if (viewAgent && actAgent) {
+        elements.activeAgentInfo.innerHTML = `
+            <div class="agent-info-details">
+                <div class="agent-info-item">
+                    <span class="agent-info-label">Viewing as:</span>
+                    <span class="agent-info-value">${viewAgent.name}</span>
+                </div>
+                <div class="agent-info-item">
+                    <span class="agent-info-label">Sending as:</span>
+                    <span class="agent-info-value">${actAgent.name}</span>
+                </div>
+            </div>
+        `;
+    } else {
+        elements.activeAgentInfo.innerHTML = '<p class="muted">No agent selected</p>';
+    }
+}
+
+function updateRecipientSelect() {
+    const currentValue = elements.recipientSelect.value;
+    elements.recipientSelect.innerHTML = '<option value="">Select recipient...</option>';
+    
+    state.agents.forEach(agent => {
+        if (agent.id !== state.selectedAgentId) {
+            const option = document.createElement('option');
+            option.value = agent.id;
+            option.textContent = agent.name;
+            elements.recipientSelect.appendChild(option);
+        }
+    });
+    
+    // Restore selection if still valid
+    if (state.agents.some(a => a.id === currentValue)) {
+        elements.recipientSelect.value = currentValue;
+    }
+}
+
+// Chat View
+function renderChatView() {
+    const viewAgent = state.agents.find(a => a.id === state.selectedAgentView);
+    if (!viewAgent) return;
+    
+    // Update header
+    elements.chatHeader.innerHTML = `
+        <div class="chat-header-content">
+            <div class="agent-avatar">${generateAvatar(viewAgent.name)}</div>
+            <div class="chat-header-info">
+                <h2>${viewAgent.name}'s Chat View</h2>
+                <div class="chat-header-status">
+                    <span class="status-dot ${viewAgent.status}"></span>
+                    ${viewAgent.status}
+                </div>
+            </div>
+        </div>
+    `;
+    
+    // Clear and render messages
+    elements.messagesContainer.innerHTML = '';
+    const messages = state.messages[state.selectedAgentView] || [];
+    
+    if (messages.length === 0) {
+        elements.messagesContainer.innerHTML = `
+            <div class="welcome-message">
+                <h3>No messages yet</h3>
+                <p>Start a conversation by sending a message.</p>
+            </div>
+        `;
+        return;
+    }
+    
+    messages.forEach(msg => {
+        renderMessage(msg);
+    });
+    
+    elements.messagesContainer.scrollTop = elements.messagesContainer.scrollHeight;
+}
+
+function renderMessage(messageData) {
+    const isSent = messageData.from === state.selectedAgentView;
+    const senderAgent = state.agents.find(a => a.id === messageData.from);
+    const senderName = senderAgent?.name || 'Unknown';
+    const senderAvatar = generateAvatar(senderName);
+    
+    const messageEl = document.createElement('div');
+    messageEl.className = `message ${isSent ? 'sent' : ''} ${messageData.isBroadcast ? 'broadcast' : ''}`;
+    
+    messageEl.innerHTML = `
+        <div class="message-avatar">${senderAvatar}</div>
+        <div class="message-content">
+            ${messageData.isBroadcast ? '<div class="message-header">BROADCAST</div>' : ''}
+            <div class="message-text">${escapeHtml(messageData.message)}</div>
+            <div class="message-time">${formatTime(messageData.timestamp)}</div>
+        </div>
+    `;
+    
+    elements.messagesContainer.appendChild(messageEl);
+}
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+// Message Handling
+async function sendMessage() {
+    if (!state.selectedAgentId) {
+        log('Please select an agent first', 'warning');
+        return;
+    }
+    
+    const message = elements.messageInput.value.trim();
+    if (!message) return;
+    
+    const isBroadcast = elements.broadcastToggle.checked;
+    const recipientId = elements.recipientSelect.value;
+    
+    // Fix: Don't require recipient for broadcast
+    if (!isBroadcast && !recipientId) {
+        log('Please select a recipient', 'warning');
+        return;
+    }
+    
+    try {
+        elements.sendButton.disabled = true;
+        
+        if (isBroadcast) {
+            await callMcp('tools/call', {
+                name: 'send-broadcast',
+                arguments: {
+                    from: state.selectedAgentId,
+                    message,
+                    priority: 'normal'
+                }
+            });
+            log('Broadcast sent', 'success');
+        } else {
+            await callMcp('tools/call', {
+                name: 'send-message',
+                arguments: {
+                    to: recipientId,
+                    from: state.selectedAgentId,
+                    message
+                }
+            });
+            log('Message sent', 'success');
+        }
+        
+        elements.messageInput.value = '';
+    } catch (error) {
+        log('Failed to send message', 'error');
+    } finally {
+        elements.sendButton.disabled = false;
+    }
+}
+
+async function pollMessages() {
+    for (const agent of state.agents) {
+        try {
+            const messages = await callMcp('tools/call', {
+                name: 'check-for-messages',
+                arguments: { agent_id: agent.id }
+            });
+            
+            if (Array.isArray(messages) && messages.length > 0) {
+                messages.forEach(msg => {
+                    // Skip if already processed
+                    const messageKey = `${msg.id}-${agent.id}`;
+                    if (state.processedMessageIds.has(messageKey)) return;
+                    state.processedMessageIds.add(messageKey);
+                    
+                    // Initialize message array for agent if needed
+                    if (!state.messages[agent.id]) {
+                        state.messages[agent.id] = [];
+                    }
+                    
+                    // Store message
+                    const isBroadcast = msg.isBroadcast || 
+                        (msg.message && msg.message.includes('[BROADCAST'));
+                    
+                    if (isBroadcast) {
+                        // Add broadcast to all agents
+                        state.agents.forEach(a => {
+                            if (!state.messages[a.id]) {
+                                state.messages[a.id] = [];
+                            }
+                            state.messages[a.id].push({ ...msg, isBroadcast: true });
+                        });
+                    } else {
+                        // Add to recipient's messages
+                        state.messages[agent.id].push(msg);
+                        
+                        // Also add to sender's messages if different
+                        if (msg.from !== agent.id) {
+                            if (!state.messages[msg.from]) {
+                                state.messages[msg.from] = [];
+                            }
+                            state.messages[msg.from].push(msg);
+                        }
+                    }
+                });
+                
+                // Update view if we're looking at this agent
+                if (agent.id === state.selectedAgentView) {
+                    renderChatView();
+                }
+            }
+        } catch (error) {
+            // Silent fail for polling
+        }
+    }
+    
+    // Clean up old message IDs
+    if (state.processedMessageIds.size > 1000) {
+        const oldKeys = Array.from(state.processedMessageIds).slice(0, 200);
+        oldKeys.forEach(key => state.processedMessageIds.delete(key));
+    }
+}
+
+// Event Listeners
+elements.newAgentButton.addEventListener('click', () => {
+    elements.newAgentModal.style.display = 'flex';
+    elements.newAgentName.focus();
+});
+
+elements.cancelAgentButton.addEventListener('click', () => {
+    elements.newAgentModal.style.display = 'none';
+    elements.newAgentName.value = '';
+    elements.newAgentDescription.value = '';
+});
+
+elements.createAgentButton.addEventListener('click', createAgent);
+
+elements.refreshAgentsButton.addEventListener('click', refreshAgents);
+
+elements.sendButton.addEventListener('click', sendMessage);
+
+elements.messageInput.addEventListener('keypress', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        sendMessage();
+    }
+});
+
+elements.broadcastToggle.addEventListener('change', () => {
+    const isBroadcast = elements.broadcastToggle.checked;
+    elements.recipientSelect.disabled = isBroadcast;
+    if (isBroadcast) {
+        elements.recipientSelect.style.opacity = '0.5';
+    } else {
+        elements.recipientSelect.style.opacity = '1';
+    }
+});
+
+// Modal close on background click
+elements.newAgentModal.addEventListener('click', (e) => {
+    if (e.target === elements.newAgentModal) {
+        elements.cancelAgentButton.click();
+    }
+});
+
+// Auto-resize textarea
+elements.messageInput.addEventListener('input', () => {
+    elements.messageInput.style.height = 'auto';
+    elements.messageInput.style.height = elements.messageInput.scrollHeight + 'px';
+});
+
+// Initialize
+async function init() {
+    log('Initializing MCP Web UI...', 'info');
+    
+    const initialized = await initializeMcp();
+    if (!initialized) {
+        log('Failed to initialize. Please check the server.', 'error');
+        return;
+    }
+    
+    await refreshAgents();
+    
+    // Start polling for messages
+    state.pollingInterval = setInterval(pollMessages, 2000);
+    
+    // Initial state
+    elements.recipientSelect.disabled = elements.broadcastToggle.checked;
+    if (elements.broadcastToggle.checked) {
+        elements.recipientSelect.style.opacity = '0.5';
+    }
+}
+
+// Start the application
+document.addEventListener('DOMContentLoaded', init);
+
+// Cleanup on page unload
+window.addEventListener('beforeunload', () => {
+    if (state.pollingInterval) {
+        clearInterval(state.pollingInterval);
+    }
+});

@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>MCP Agent Monitor</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+    <div class="app-container">
+        <!-- Header -->
+        <header class="app-header">
+            <h1>MCP Agent Monitor</h1>
+            <div class="header-controls">
+                <label class="toggle-switch">
+                    <input type="checkbox" id="showOnlyNewToggle">
+                    <span>Show only new messages</span>
+                </label>
+                <button id="markAllReadButton" class="text-button">Mark all as seen</button>
+                <label class="toggle-switch">
+                    <input type="checkbox" id="reverseOrderToggle" checked>
+                    <span>Newest first</span>
+                </label>
+                <label class="toggle-switch">
+                    <input type="checkbox" id="autoScrollToggle">
+                    <span>Auto-scroll</span>
+                </label>
+                <button id="cleanupButton" class="text-button danger">Clean old messages</button>
+                <button id="showPanelButton" class="text-button" style="display: none;" title="Show Stats Panel">📊</button>
+            </div>
+            <div class="header-info">
+                <span class="status-indicator" id="connectionStatus"></span>
+                <span id="lastUpdate">Never</span>
+            </div>
+        </header>
+        
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Agent List -->
+            <aside class="agent-panel">
+                <div class="panel-header">
+                    <h2>Active Agents</h2>
+                    <button id="refreshButton" class="icon-button" title="Refresh">↻</button>
+                </div>
+                <div id="agentList" class="agent-list">
+                    <div class="loading-state">Loading agents...</div>
+                </div>
+            </aside>
+            
+            <!-- Chat Display -->
+            <section class="chat-display">
+                <div id="chatView" class="chat-view">
+                    <div class="empty-state">
+                        <h3>MCP Agent Conversation Monitor</h3>
+                        <p>Select an agent to view their conversation history</p>
+                        <p class="muted">Agents are controlled via Claude CLI</p>
+                    </div>
+                </div>
+            </section>
+            
+            <!-- Conversation Stats -->
+            <aside class="stats-panel" id="statsPanel">
+                <div class="panel-header">
+                    <h2>Statistics</h2>
+                    <button id="panelCollapseButton" class="icon-button" title="Hide Panel">✕</button>
+                </div>
+                <div id="statsContent" class="stats-content">
+                    <div class="stat-item">
+                        <span class="stat-label">Total Agents</span>
+                        <span class="stat-value" id="totalAgents">0</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Total Messages</span>
+                        <span class="stat-value" id="totalMessages">0</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Broadcasts</span>
+                        <span class="stat-value" id="totalBroadcasts">0</span>
+                    </div>
+                </div>
+                
+                <div class="panel-header" style="margin-top: 2rem;">
+                    <h2>System Log</h2>
+                    <button id="logCollapseButton" class="icon-button" title="Collapse">⌄</button>
+                </div>
+                <pre id="systemLog" class="system-log"></pre>
+            </aside>
+        </main>
+    </div>
+    
+    <script src="monitor.js"></script>
+</body>
+</html>
