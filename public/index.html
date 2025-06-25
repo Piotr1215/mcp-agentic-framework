@@ -14,20 +14,24 @@
             <h1>MCP Agent Monitor</h1>
             <div class="header-controls">
                 <label class="toggle-switch">
-                    <input type="checkbox" id="showOnlyNewToggle">
-                    <span>Show only new messages</span>
-                </label>
-                <button id="markAllReadButton" class="text-button">Mark all as seen</button>
-                <label class="toggle-switch">
-                    <input type="checkbox" id="reverseOrderToggle" checked>
-                    <span>Newest first</span>
-                </label>
-                <label class="toggle-switch">
                     <input type="checkbox" id="autoScrollToggle">
                     <span>Auto-scroll</span>
                 </label>
-                <button id="cleanupButton" class="text-button danger">Clean old messages</button>
-                <button id="showPanelButton" class="text-button" style="display: none;" title="Show Stats Panel">📊</button>
+                <label class="toggle-switch">
+                    <input type="checkbox" id="showOnlyNewToggle">
+                    <span>Show only new</span>
+                </label>
+                <button id="markAllReadButton" class="text-button">Mark all read</button>
+                <label class="toggle-switch">
+                    <input type="checkbox" id="reverseOrderToggle">
+                    <span>Newest first</span>
+                </label>
+                <label class="toggle-switch">
+                    <input type="checkbox" id="hideBroadcastsToggle">
+                    <span>Hide broadcasts</span>
+                </label>
+                <button id="cleanupButton" class="text-button danger">🗑️ Clean old</button>
+                <button id="showPanelButton" class="text-button" style="display: none;" title="Show Stats">📊</button>
             </div>
             <div class="header-info">
                 <span class="status-indicator" id="connectionStatus"></span>

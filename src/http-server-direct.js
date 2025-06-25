@@ -1,5 +1,6 @@
 import express from 'express';
 import cors from 'cors';
+import { EventEmitter } from 'events';
 import { toolDefinitions } from './toolDefinitions.js';
 import { 
   registerAgent, 
@@ -13,7 +14,18 @@ import {
   sendBroadcast,
   getPendingNotifications
 } from './tools.js';
+import {
+  requestSpeakingStick,
+  releaseSpeakingStick,
+  setCommunicationMode,
+  trackSpeakingViolation,
+  nudgeSilentAgents,
+  getSpeakingStickStatus
+} from './speakingStick.js';
 import { Errors, MCPError } from './errors.js';
+
+// Increase max listeners to prevent warnings
+EventEmitter.defaultMaxListeners = 20;
 
 const app = express();
 const port = process.env.PORT || 3113;
@@ -76,6 +88,34 @@ async function handleToolCall(name, args) {
     case 'get-pending-notifications': {
       const { agent_id } = args;
       return await getPendingNotifications(agent_id);
+    }
+
+    case 'request-speaking-stick': {
+      const { requesting_agent, topic, urgent, privilege_level } = args;
+      return await requestSpeakingStick(requesting_agent, topic, urgent, privilege_level);
+    }
+
+    case 'release-speaking-stick': {
+      const { releasing_agent, summary, pass_to_specific } = args;
+      return await releaseSpeakingStick(releasing_agent, summary, pass_to_specific);
+    }
+
+    case 'set-communication-mode': {
+      const { mode, initiated_by, enforcement_level } = args;
+      return await setCommunicationMode(mode, initiated_by, enforcement_level);
+    }
+
+    case 'track-speaking-violation': {
+      const { violating_agent, violation_type, context } = args;
+      return await trackSpeakingViolation(violating_agent, violation_type, context);
+    }
+
+    case 'nudge-silent-agents': {
+      return await nudgeSilentAgents();
+    }
+
+    case 'get-speaking-stick-status': {
+      return await getSpeakingStickStatus();
     }
 
     default:
@@ -275,6 +315,24 @@ app.get('/monitor/messages', async (req, res) => {
     });
   } catch (error) {
     console.error('Error fetching messages for monitor:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// Monitor endpoint - get speaking stick status
+app.get('/monitor/speaking-stick', async (req, res) => {
+  try {
+    const { getSpeakingStickState } = await import('./speakingStick.js');
+    const state = getSpeakingStickState();
+    res.json({
+      success: true,
+      speakingStick: state
+    });
+  } catch (error) {
+    console.error('Error fetching speaking stick status:', error);
     res.status(500).json({
       success: false,
       error: error.message

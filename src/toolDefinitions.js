@@ -1,3 +1,5 @@
+import { speakingStickDefinitions } from './speakingStickDefinitions.js';
+
 export const toolDefinitions = [
   {
     name: 'register-agent',
@@ -391,5 +393,6 @@ export const toolDefinitions = [
         required: ['jsonrpc', 'method', 'params']
       }
     }
-  }
+  },
+  ...speakingStickDefinitions
 ];

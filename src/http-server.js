@@ -8,6 +8,10 @@ import {
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { createServer } from './server.js';
 import { Errors, MCPError } from './errors.js';
+import { EventEmitter } from 'events';
+
+// Increase max listeners to prevent warnings
+EventEmitter.defaultMaxListeners = 20;
 
 const app = express();
 const port = process.env.PORT || 3113;
@@ -91,7 +95,7 @@ app.all('/mcp', async (req, res) => {
       sseConnections.get(sessionId).push(res);
 
       // Handle client disconnect
-      req.on('close', () => {
+      const handleClose = () => {
         const connections = sseConnections.get(sessionId);
         if (connections) {
           const index = connections.indexOf(res);
@@ -102,7 +106,10 @@ app.all('/mcp', async (req, res) => {
             sseConnections.delete(sessionId);
           }
         }
-      });
+        // Clean up the listener
+        req.removeListener('close', handleClose);
+      };
+      req.on('close', handleClose);
     }
 
     // Send initial ping

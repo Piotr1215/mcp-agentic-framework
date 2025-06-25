@@ -11,8 +11,13 @@ const state = {
     processedMessageIds: new Set(),
     pollingInterval: null,
     isConnected: false,
-    reverseOrder: true, // Show newest first by default
-    autoScroll: false // Auto-scroll disabled by default
+    reverseOrder: true, // Show newest first by default - new messages at top!
+    autoScroll: false, // Auto-scroll disabled by default - for slow readers!
+    showOnlyNew: false,
+    lastSeenTimestamp: null,
+    hideBroadcasts: false,
+    speakingStickHolder: null, // Track who has the speaking stick
+    speakingStickMode: 'chaos' // Track current mode
 };
 
 // DOM Elements
@@ -26,14 +31,15 @@ const elements = {
     totalAgents: document.getElementById('totalAgents'),
     totalMessages: document.getElementById('totalMessages'),
     totalBroadcasts: document.getElementById('totalBroadcasts'),
+    panelCollapseButton: document.getElementById('panelCollapseButton'),
+    statsPanel: document.getElementById('statsPanel'),
+    reverseOrderToggle: document.getElementById('reverseOrderToggle'),
+    autoScrollToggle: document.getElementById('autoScrollToggle'),
     showOnlyNewToggle: document.getElementById('showOnlyNewToggle'),
     markAllReadButton: document.getElementById('markAllReadButton'),
     cleanupButton: document.getElementById('cleanupButton'),
-    panelCollapseButton: document.getElementById('panelCollapseButton'),
     showPanelButton: document.getElementById('showPanelButton'),
-    statsPanel: document.getElementById('statsPanel'),
-    reverseOrderToggle: document.getElementById('reverseOrderToggle'),
-    autoScrollToggle: document.getElementById('autoScrollToggle')
+    hideBroadcastsToggle: document.getElementById('hideBroadcastsToggle')
 };
 
 // Fun emojis for agents
@@ -230,10 +236,14 @@ async function refreshAgents() {
         elements.refreshButton.disabled = true;
         elements.refreshButton.innerHTML = '<span class="loading"></span>';
         
+        // Fetch agents
         const result = await callMcp('tools/call', {
             name: 'discover-agents',
             arguments: {}
         });
+        
+        // Fetch speaking stick status
+        await fetchSpeakingStickStatus();
         
         if (result && result.structuredContent) {
             state.agents = result.structuredContent;
@@ -257,25 +267,54 @@ function renderAgentList() {
         return;
     }
     
-    elements.agentList.innerHTML = state.agents.map(agent => `
-        <div class="agent-item ${agent.id === state.selectedAgentId ? 'active' : ''}" 
-             data-agent-id="${agent.id}">
-            <div class="agent-avatar">${generateAvatar(agent.name, agent.id)}</div>
+    // Add "Show All" button at the top
+    let agentListHtml = `
+        <div class="agent-item show-all ${!state.selectedAgentId ? 'active' : ''}" 
+             data-agent-id="all">
+            <div class="agent-avatar">👥</div>
             <div class="agent-info">
-                <div class="agent-name">${escapeHtml(agent.name)}</div>
+                <div class="agent-name">Show All Messages</div>
                 <div class="agent-status">
-                    <span class="status-dot ${agent.status}"></span>
-                    ${agent.status}
+                    <span class="status-dot online"></span>
+                    ${state.agents.length} agents
                 </div>
             </div>
         </div>
-    `).join('');
+        <div style="height: 1px; background: var(--border); margin: 0.5rem 0;"></div>
+    `;
+    
+    agentListHtml += state.agents.map(agent => {
+        const hasSpeakingStick = state.speakingStickHolder === agent.id;
+        return `
+            <div class="agent-item ${agent.id === state.selectedAgentId ? 'active' : ''}" 
+                 data-agent-id="${agent.id}">
+                <div class="agent-avatar">${generateAvatar(agent.name, agent.id)}</div>
+                <div class="agent-info">
+                    <div class="agent-name">
+                        ${escapeHtml(agent.name)}
+                        ${hasSpeakingStick ? '<span style="margin-left: 5px;">🎤</span>' : ''}
+                    </div>
+                    <div class="agent-status">
+                        <span class="status-dot ${agent.status}"></span>
+                        ${agent.status}
+                        ${state.speakingStickMode === 'speaking-stick' && !hasSpeakingStick ? '(listening)' : ''}
+                    </div>
+                </div>
+            </div>
+        `;
+    }).join('');
+    
+    elements.agentList.innerHTML = agentListHtml;
     
     // Add click handlers
     elements.agentList.querySelectorAll('.agent-item').forEach(item => {
         item.addEventListener('click', () => {
             const agentId = item.dataset.agentId;
-            selectAgent(agentId);
+            if (agentId === 'all') {
+                selectAgent(null); // Show all messages
+            } else {
+                selectAgent(agentId);
+            }
         });
     });
 }
@@ -303,7 +342,20 @@ function renderChatView() {
         const agent = state.agents.find(a => a.id === state.selectedAgentId);
         if (!agent) return;
         
-        messages = state.messages[state.selectedAgentId] || [];
+        // Filter ALL messages to only show ones involving this agent
+        messages = state.allMessages.filter(msg => {
+            // Always include messages FROM this agent
+            if (msg.from === state.selectedAgentId) return true;
+            
+            // For messages TO this agent, check if broadcast
+            if (msg.to === state.selectedAgentId) {
+                // If hiding broadcasts, exclude broadcast messages
+                if (state.hideBroadcasts && msg.isBroadcast) return false;
+                return true;
+            }
+            
+            return false;
+        });
         headerHtml = `
             <div class="chat-header">
                 <div class="agent-avatar">${generateAvatar(agent.name, agent.id)}</div>
@@ -340,18 +392,19 @@ function renderChatView() {
         );
     }
     
+    // Filter out broadcasts if toggle is on
+    if (state.hideBroadcasts) {
+        displayMessages = displayMessages.filter(msg => !msg.isBroadcast);
+    }
+    
     if (displayMessages.length === 0) {
         html += `
             <div class="empty-state">
                 <p>${state.showOnlyNew ? 'No new messages' : 'No messages yet'}</p>
-                <p class="muted">${state.showOnlyNew ? 'New messages will appear here' : 'Messages will appear here when agents communicate via Claude CLI'}</p>
+                <p class="muted">${state.showOnlyNew ? 'New messages will appear here' : 'Messages will appear here when agents communicate'}</p>
             </div>
         `;
     } else {
-        // Show message count if filtered
-        if (state.showOnlyNew && displayMessages.length < messages.length) {
-            html += `<div class="message-filter-info">Showing ${displayMessages.length} new messages (${messages.length} total)</div>`;
-        }
         
         // Sort messages based on order preference
         if (state.reverseOrder) {
@@ -382,6 +435,7 @@ function renderChatView() {
                     </div>
                 `;
                 lastDate = msgDate;
+                lastSenderId = null; // Reset sender tracking on new date
             }
             
             const senderAgent = state.agents.find(a => a.id === msg.from);
@@ -389,6 +443,7 @@ function renderChatView() {
             const senderName = senderAgent?.name || 'Unknown';
             const recipientName = recipientAgent?.name || 'Unknown';
             const senderAvatar = generateAvatar(senderName, msg.from);
+            
             const isSent = state.selectedAgentId && msg.from === state.selectedAgentId;
             
             html += `
@@ -409,28 +464,50 @@ function renderChatView() {
     }
     
     html += '</div>';
+    
+    // Save scroll position before updating
+    const scrollTop = elements.chatView.scrollTop;
+    const scrollHeight = elements.chatView.scrollHeight;
+    
     elements.chatView.innerHTML = html;
     
-    // Auto-scroll logic based on settings
-    if (state.autoScroll) {
-        const scrollFunction = state.reverseOrder ? 
-            // Scroll to top for newest-first
-            () => { if (elements.chatView) elements.chatView.scrollTop = 0; } :
-            // Scroll to bottom for oldest-first
-            () => { if (elements.chatView) elements.chatView.scrollTop = elements.chatView.scrollHeight; };
+    // Restore scroll position - STOP THE MOVEMENT!
+    if (!state.autoScroll) {
+        // Calculate the difference in height and adjust
+        const newScrollHeight = elements.chatView.scrollHeight;
+        const heightDiff = newScrollHeight - scrollHeight;
         
-        // Try multiple times to ensure scroll works
-        requestAnimationFrame(() => {
-            scrollFunction();
-            setTimeout(scrollFunction, 10);
-            setTimeout(scrollFunction, 100);
-            setTimeout(scrollFunction, 200);
-        });
+        // If showing oldest first, maintain position
+        if (!state.reverseOrder) {
+            elements.chatView.scrollTop = scrollTop;
+        } else {
+            // If showing newest first, adjust for new content at top
+            elements.chatView.scrollTop = scrollTop + heightDiff;
+        }
     }
+    
+}
+
+// Fetch speaking stick status
+async function fetchSpeakingStickStatus() {
+    try {
+        const response = await fetch('http://127.0.0.1:3113/monitor/speaking-stick');
+        const data = await response.json();
+        
+        if (data.success && data.speakingStick) {
+            state.speakingStickHolder = data.speakingStick.currentHolder;
+            state.speakingStickMode = data.speakingStick.mode;
+            return true;
+        }
+    } catch (error) {
+        // Silent fail
+    }
+    return false;
 }
 
 // Poll for messages using monitor endpoint
 async function pollMessages() {
+    
     try {
         const response = await fetch('http://127.0.0.1:3113/monitor/messages');
         const data = await response.json();
@@ -458,7 +535,10 @@ async function pollMessages() {
             const broadcastSignatures = new Set();
             
             allCombinedMessages.forEach(msg => {
-                const isBroadcast = msg.to === 'BROADCAST' || (msg.message && msg.message.includes('[BROADCAST'));
+                const isBroadcast = msg.to === 'BROADCAST' || 
+                    msg.to === 'broadcast' || 
+                    (msg.message && msg.message.includes('[BROADCAST')) ||
+                    (msg.message && msg.message.toLowerCase().includes('broadcast'));
                 
                 if (isBroadcast) {
                     // Create signature based on sender, message content (without timestamps in content)
@@ -499,12 +579,12 @@ async function pollMessages() {
                         state.messages[agent.id].push(msg);
                     });
                 } else {
-                    // Add to recipient
-                    if (state.messages[msg.to]) {
+                    // Add to recipient's view
+                    if (msg.to && state.messages[msg.to]) {
                         state.messages[msg.to].push(msg);
                     }
-                    // Add to sender
-                    if (msg.from && state.messages[msg.from]) {
+                    // IMPORTANT: Also add to sender's view (they should see their own sent messages)
+                    if (msg.from && state.messages[msg.from] && msg.from !== msg.to) {
                         state.messages[msg.from].push(msg);
                     }
                 }
@@ -513,18 +593,6 @@ async function pollMessages() {
             updateStats();
             renderChatView();
             
-            // Auto-scroll after new messages if enabled
-            if (state.autoScroll) {
-                setTimeout(() => {
-                    if (elements.chatView) {
-                        if (state.reverseOrder) {
-                            elements.chatView.scrollTop = 0; // Scroll to top for newest-first
-                        } else {
-                            elements.chatView.scrollTop = elements.chatView.scrollHeight; // Scroll to bottom for oldest-first
-                        }
-                    }
-                }, 50);
-            }
         }
     } catch (error) {
         // Silent fail for polling
@@ -626,25 +694,7 @@ elements.refreshButton.addEventListener('click', () => {
     refreshAgents();
 });
 
-elements.showOnlyNewToggle.addEventListener('change', () => {
-    state.showOnlyNew = elements.showOnlyNewToggle.checked;
-    if (state.showOnlyNew && !state.lastSeenTimestamp) {
-        // Mark current time as last seen
-        state.lastSeenTimestamp = new Date().toISOString();
-    }
-    renderChatView();
-    log(`Toggled to show ${state.showOnlyNew ? 'only new' : 'all'} messages`, 'info');
-});
-
-elements.markAllReadButton.addEventListener('click', () => {
-    state.lastSeenTimestamp = new Date().toISOString();
-    if (state.showOnlyNew) {
-        renderChatView();
-    }
-    log('Marked all messages as seen', 'info');
-});
-
-// Panel collapse functionality for horizontal space
+// Panel collapse functionality
 elements.panelCollapseButton.addEventListener('click', () => {
     elements.statsPanel.style.display = 'none';
     elements.showPanelButton.style.display = 'inline-block';
@@ -655,6 +705,13 @@ elements.showPanelButton.addEventListener('click', () => {
     elements.showPanelButton.style.display = 'none';
 });
 
+// Hide broadcasts toggle
+elements.hideBroadcastsToggle.addEventListener('change', () => {
+    state.hideBroadcasts = elements.hideBroadcastsToggle.checked;
+    renderChatView();
+    log(`Broadcasts: ${state.hideBroadcasts ? 'hidden' : 'shown'}`, 'info');
+});
+
 // UX improvement toggles
 elements.reverseOrderToggle.addEventListener('change', () => {
     state.reverseOrder = elements.reverseOrderToggle.checked;
@@ -662,29 +719,46 @@ elements.reverseOrderToggle.addEventListener('change', () => {
     log(`Message order: ${state.reverseOrder ? 'newest first' : 'oldest first'}`, 'info');
 });
 
+// Auto-scroll toggle
 elements.autoScrollToggle.addEventListener('change', () => {
     state.autoScroll = elements.autoScrollToggle.checked;
     log(`Auto-scroll: ${state.autoScroll ? 'enabled' : 'disabled'}`, 'info');
 });
 
+// Show only new toggle
+elements.showOnlyNewToggle.addEventListener('change', () => {
+    state.showOnlyNew = elements.showOnlyNewToggle.checked;
+    if (state.showOnlyNew && !state.lastSeenTimestamp) {
+        // Mark current time as last seen
+        state.lastSeenTimestamp = new Date().toISOString();
+    }
+    renderChatView();
+    log(`Toggled to show ${state.showOnlyNew ? 'only new' : 'all'} messages`, 'info');
+});
+
+// Mark all read button
+elements.markAllReadButton.addEventListener('click', () => {
+    state.lastSeenTimestamp = new Date().toISOString();
+    if (state.showOnlyNew) {
+        renderChatView();
+    }
+    log('Marked all messages as read', 'info');
+});
+
+// Cleanup button
 elements.cleanupButton.addEventListener('click', async () => {
-    const hours = prompt('Delete messages older than how many hours? (default: 24)', '24');
-    if (hours === null) return;
-    
-    const hoursNum = parseInt(hours) || 24;
-    if (confirm(`This will permanently delete messages older than ${hoursNum} hours. Continue?`)) {
+    if (confirm('Delete all messages older than 24 hours?')) {
         try {
             elements.cleanupButton.disabled = true;
-            elements.cleanupButton.textContent = 'Cleaning...';
+            elements.cleanupButton.innerHTML = '⏳';
             
-            const response = await fetch(`http://127.0.0.1:3113/monitor/cleanup?olderThanHours=${hoursNum}`, {
+            const response = await fetch('http://127.0.0.1:3113/monitor/cleanup?olderThanHours=24', {
                 method: 'DELETE'
             });
             const result = await response.json();
             
             if (result.success) {
-                log(`Deleted ${result.deletedCount} messages older than ${hoursNum} hours`, 'success');
-                // Refresh messages
+                log(`Deleted ${result.deletedCount} old messages`, 'success');
                 await pollMessages();
             } else {
                 log('Failed to cleanup messages', 'error');
@@ -693,10 +767,12 @@ elements.cleanupButton.addEventListener('click', async () => {
             log('Error during cleanup: ' + error.message, 'error');
         } finally {
             elements.cleanupButton.disabled = false;
-            elements.cleanupButton.textContent = 'Clean old messages';
+            elements.cleanupButton.innerHTML = '🗑️ Clean old';
         }
     }
 });
+
+
 
 // Auto-refresh every 30 seconds
 setInterval(() => {
@@ -721,8 +797,12 @@ async function init() {
     // Show all messages by default
     renderChatView();
     
-    // Start polling for messages
-    state.pollingInterval = setInterval(pollMessages, 1500); // Poll every 1.5 seconds
+    // Start polling for messages and speaking stick status
+    state.pollingInterval = setInterval(async () => {
+        await pollMessages();
+        await fetchSpeakingStickStatus();
+        renderAgentList(); // Re-render to update speaking stick indicator
+    }, 1500); // Poll every 1.5 seconds
 }
 
 // Start the application
