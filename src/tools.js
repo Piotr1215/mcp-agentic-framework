@@ -183,7 +183,7 @@ export async function discoverAgents() {
       message = `Found ${agents.length} registered agent${agents.length === 1 ? '' : 's'}:\n${agentList}`;
     }
     
-    return structuredResponse(agents, message, metadata);
+    return structuredResponse({ agents }, message, metadata);
   } catch (error) {
     if (error instanceof MCPError) {
       throw error;
@@ -280,7 +280,7 @@ export async function checkForMessages(agentId) {
       message = `Retrieved ${formattedMessages.length} new message${formattedMessages.length === 1 ? '' : 's'} for agent '${agent.name}':\n\n${messageList}`;
     }
     
-    return structuredResponse(formattedMessages, message, metadata);
+    return structuredResponse({ messages: formattedMessages }, message, metadata);
   } catch (error) {
     if (error instanceof MCPError) {
       throw error;
@@ -482,7 +482,7 @@ export async function getPendingNotifications(agentId) {
       message = `No pending notifications for agent '${agent.name}'`;
     }
     
-    return structuredResponse(notifications, message, metadata);
+    return structuredResponse({ notifications }, message, metadata);
   } catch (error) {
     if (error instanceof MCPError) {
       throw error;

@@ -130,20 +130,26 @@ app.post('/mcp', async (req, res) => {
     
     // Log for debugging
     console.log('Received message:', JSON.stringify(message, null, 2));
+    console.log('Headers:', req.headers);
 
+    // Check for protocol version in subsequent requests
+    const protocolVersion = req.headers['mcp-protocol-version'];
+    
     // Handle different message types
     if (message.method === 'initialize') {
+      const requestedVersion = message.params?.protocolVersion || '2025-06-18';
       const sessionId = `session-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
       sessions.set(sessionId, {
         createdAt: new Date().toISOString(),
-        clientInfo: message.params?.clientInfo
+        clientInfo: message.params?.clientInfo,
+        protocolVersion: requestedVersion
       });
       
       const response = {
         jsonrpc: '2.0',
         id: message.id,
         result: {
-          protocolVersion: '2024-11-05',
+          protocolVersion: '2025-06-18',
           capabilities: {
             tools: {}
           },
@@ -155,6 +161,7 @@ app.post('/mcp', async (req, res) => {
       };
       
       res.setHeader('Mcp-Session-Id', sessionId);
+      res.setHeader('MCP-Protocol-Version', '2025-06-18');
       res.json(response);
       console.log('Sent initialize response with session:', sessionId);
       return;
@@ -166,9 +173,13 @@ app.post('/mcp', async (req, res) => {
         jsonrpc: '2.0',
         id: message.id,
         result: {
-          tools: toolDefinitions
+          tools: toolDefinitions,
+          _meta: {
+            toolsCount: toolDefinitions.length
+          }
         }
       };
+      res.setHeader('MCP-Protocol-Version', '2025-06-18');
       res.json(response);
       console.log('Sent tools list');
       return;
@@ -186,10 +197,12 @@ app.post('/mcp', async (req, res) => {
           id: message.id,
           result
         };
+        res.setHeader('MCP-Protocol-Version', '2025-06-18');
         res.json(response);
         console.log('Tool call successful:', name);
       } catch (error) {
         console.error('Tool call error:', error);
+        res.setHeader('MCP-Protocol-Version', '2025-06-18');
         res.json({
           jsonrpc: '2.0',
           id: message.id,

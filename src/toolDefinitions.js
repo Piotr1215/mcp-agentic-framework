@@ -86,26 +86,33 @@ export const toolDefinitions = [
     },
     outputSchema: {
       $schema: 'http://json-schema.org/draft-07/schema#',
-      type: 'array',
-      items: {
-        type: 'object',
-        properties: {
-          id: {
-            type: 'string',
-            description: 'The unique identifier of the agent'
-          },
-          name: {
-            type: 'string',
-            description: 'The name of the agent'
-          },
-          description: {
-            type: 'string',
-            description: 'The description of the agent'
+      type: 'object',
+      properties: {
+        agents: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              id: {
+                type: 'string',
+                description: 'The unique identifier of the agent'
+              },
+              name: {
+                type: 'string',
+                description: 'The name of the agent'
+              },
+              description: {
+                type: 'string',
+                description: 'The description of the agent'
+              }
+            },
+            required: ['id', 'name', 'description'],
+            additionalProperties: false
           }
-        },
-        required: ['id', 'name', 'description'],
-        additionalProperties: false
-      }
+        }
+      },
+      required: ['agents'],
+      additionalProperties: false
     }
   },
   {
@@ -168,26 +175,33 @@ export const toolDefinitions = [
     },
     outputSchema: {
       $schema: 'http://json-schema.org/draft-07/schema#',
-      type: 'array',
-      items: {
-        type: 'object',
-        properties: {
-          from: {
-            type: 'string',
-            description: 'The ID of the sender agent'
-          },
-          message: {
-            type: 'string',
-            description: 'The message content'
-          },
-          timestamp: {
-            type: 'string',
-            description: 'ISO 8601 timestamp when the message was sent'
+      type: 'object',
+      properties: {
+        messages: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              from: {
+                type: 'string',
+                description: 'The ID of the sender agent'
+              },
+              message: {
+                type: 'string',
+                description: 'The message content'
+              },
+              timestamp: {
+                type: 'string',
+                description: 'ISO 8601 timestamp when the message was sent'
+              }
+            },
+            required: ['from', 'message', 'timestamp'],
+            additionalProperties: false
           }
-        },
-        required: ['from', 'message', 'timestamp'],
-        additionalProperties: false
-      }
+        }
+      },
+      required: ['messages'],
+      additionalProperties: false
     }
   },
   {
@@ -373,25 +387,32 @@ export const toolDefinitions = [
     },
     outputSchema: {
       $schema: 'http://json-schema.org/draft-07/schema#',
-      type: 'array',
-      items: {
-        type: 'object',
-        properties: {
-          jsonrpc: {
-            type: 'string',
-            description: 'JSON-RPC version'
-          },
-          method: {
-            type: 'string',
-            description: 'The notification method/type'
-          },
-          params: {
+      type: 'object',
+      properties: {
+        notifications: {
+          type: 'array',
+          items: {
             type: 'object',
-            description: 'The notification parameters'
+            properties: {
+              jsonrpc: {
+                type: 'string',
+                description: 'JSON-RPC version'
+              },
+              method: {
+                type: 'string',
+                description: 'The notification method/type'
+              },
+              params: {
+                type: 'object',
+                description: 'The notification parameters'
+              }
+            },
+            required: ['jsonrpc', 'method', 'params']
           }
-        },
-        required: ['jsonrpc', 'method', 'params']
-      }
+        }
+      },
+      required: ['notifications'],
+      additionalProperties: false
     }
   },
   ...speakingStickDefinitions
