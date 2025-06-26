@@ -154,8 +154,9 @@ describe('Speaking Stick Implementation', () => {
         'All done'
       );
 
-      expect(result.structuredContent.released).toBe(true);
-      expect(result.structuredContent.next_holder).toBe(null);
+      // Fixed: Cannot release with empty queue - stick stays with holder
+      expect(result.structuredContent.released).toBe(false);
+      expect(result.structuredContent.error).toContain('Cannot release - no one in queue');
     });
   });
 
@@ -403,13 +404,15 @@ describe('Speaking Stick Implementation', () => {
 
       expect(violation1.structuredContent.total_violations).toBeGreaterThan(0);
 
-      // Release with poor summary
+      // Release with poor summary - but no one in queue!
       const release = await releaseSpeakingStick(
         testAgents.piglette.structuredContent.id,
         'Quantum stuff happened'
       );
 
-      expect(release.structuredContent.released).toBe(true);
+      // Fixed: Cannot release with empty queue
+      expect(release.structuredContent.released).toBe(false);
+      expect(release.structuredContent.error).toContain('Cannot release - no one in queue');
     });
 
     it('should handle nudging with context awareness', async () => {

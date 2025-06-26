@@ -90,6 +90,9 @@ describe('Broadcast Enforcement in Speaking Stick Mode', () => {
         'human',
         'prompt-modification'
       );
+      // Human needs to release the stick so tests can proceed
+      // But wait - human can't release with empty queue!
+      // We need to request first, then human can pass it
     });
 
     it('should REJECT broadcasts from agents without the stick', async () => {
@@ -403,21 +406,25 @@ describe('Broadcast Enforcement in Speaking Stick Mode', () => {
   });
 
   describe('Edge Cases and Error Handling', () => {
-    it.skip('should handle broadcast attempt with invalid agent ID', async () => {
+    it('should handle broadcast attempt with invalid agent ID', async () => {
       await setCommunicationMode(
         'speaking-stick',
         'human',
         'prompt-modification'
       );
 
-      const result = await sendBroadcast(
-        'invalid-agent-id',
-        'Ghost broadcast!',
-        'normal'
-      );
-
-      expect(result.structuredContent.success).toBe(false);
-      expect(result.structuredContent.error).toContain('Agent not found');
+      try {
+        const result = await sendBroadcast(
+          'invalid-agent-id',
+          'Ghost broadcast!',
+          'normal'
+        );
+        // Should not reach here
+        expect(result).toBeUndefined();
+      } catch (error) {
+        // Expected to throw
+        expect(error.message).toContain('Sender agent not found');
+      }
     });
 
     it('should handle concurrent broadcast attempts', async () => {
@@ -473,15 +480,16 @@ describe('Broadcast Enforcement in Speaking Stick Mode', () => {
 
       // State should remain consistent
       const state = getSpeakingStickState();
-      expect(state.currentHolder).toBe(null);
+      expect(state.currentHolder).toBe('human'); // Human gets it when switching modes
       expect(state.mode).toBe('speaking-stick');
 
-      // Valid request should still work
+      // Valid request should still work - Dirty Clown queues up
       const validRequest = await requestSpeakingStick(
         testAgents.dirtyClown.structuredContent.id,
         'Testing after errors'
       );
-      expect(validRequest.structuredContent.granted).toBe(true);
+      expect(validRequest.structuredContent.granted).toBe(false); // He's queued, human still has it
+      expect(validRequest.structuredContent.queue_position).toBe(1);
     });
   });
 

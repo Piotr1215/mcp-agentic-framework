@@ -328,5 +328,43 @@ export const speakingStickDefinitions = [
       required: ['mode', 'enforcement_level'],
       additionalProperties: false
     }
+  },
+  {
+    name: 'force-reset-speaking-stick',
+    title: 'Force Reset Speaking Stick',
+    description: 'Emergency reset of speaking stick when holder is invalid/disconnected',
+    inputSchema: {
+      $schema: 'http://json-schema.org/draft-07/schema#',
+      type: 'object',
+      properties: {
+        initiated_by: {
+          type: 'string',
+          description: 'ID of agent initiating the reset',
+          minLength: 1
+        }
+      },
+      required: ['initiated_by'],
+      additionalProperties: false
+    },
+    outputSchema: {
+      $schema: 'http://json-schema.org/draft-07/schema#',
+      type: 'object',
+      properties: {
+        reset: {
+          type: 'boolean',
+          description: 'Whether the reset was successful'
+        },
+        previous_holder: {
+          type: ['string', 'null'],
+          description: 'ID of previous stick holder'
+        },
+        cleared_queue_length: {
+          type: 'number',
+          description: 'Number of agents that were in queue'
+        }
+      },
+      required: ['reset'],
+      additionalProperties: false
+    }
   }
 ];

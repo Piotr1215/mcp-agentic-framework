@@ -47,7 +47,7 @@ describe('Tool Handlers', () => {
     it('should return empty array when no agents registered', async () => {
       const result = await discoverAgents();
       
-      expect(result.structuredContent).toEqual([]);
+      expect(result.structuredContent).toEqual({ agents: [] });
       expect(result.content[0].text).toContain('No agents currently registered');
     });
 
@@ -57,7 +57,7 @@ describe('Tool Handlers', () => {
       
       const result = await discoverAgents();
       
-      expect(result.structuredContent).toHaveLength(2);
+      expect(result.structuredContent.agents).toHaveLength(2);
       expect(result.content[0].text).toContain('Found 2 registered agents');
       expect(result.content[0].text).toContain('Agent1');
       expect(result.content[0].text).toContain('Agent2');
@@ -107,7 +107,7 @@ describe('Tool Handlers', () => {
       
       const result = await checkForMessages(agent.structuredContent.id);
       
-      expect(result.structuredContent).toEqual([]);
+      expect(result.structuredContent).toEqual({ messages: [] });
       expect(result.content[0].text).toContain('No new messages');
     });
 
@@ -130,12 +130,12 @@ describe('Tool Handlers', () => {
       // Check messages
       const result = await checkForMessages(agent2.structuredContent.id);
       
-      expect(result.structuredContent).toHaveLength(2);
+      expect(result.structuredContent.messages).toHaveLength(2);
       expect(result.content[0].text).toContain('Retrieved 2 new messages');
       expect(result.content[0].text).toContain('Message 1');
       expect(result.content[0].text).toContain('Message 2');
       expect(result.content[0].text).toContain(agent1.structuredContent.id);
-      expect(result.structuredContent[0]).toMatchObject({
+      expect(result.structuredContent.messages[0]).toMatchObject({
         from: agent1.structuredContent.id,
         fromName: 'Agent1',
         message: 'Message 1',
@@ -145,7 +145,7 @@ describe('Tool Handlers', () => {
       
       // Check again - should be empty (messages deleted after retrieval)
       const secondCheck = await checkForMessages(agent2.structuredContent.id);
-      expect(secondCheck.structuredContent).toHaveLength(0);
+      expect(secondCheck.structuredContent.messages).toHaveLength(0);
     });
 
     it('should throw error if agent not found', async () => {
@@ -172,11 +172,11 @@ describe('Tool Handlers', () => {
       
       // Check messages (which should delete them)
       const messages = await checkForMessages(agent2.structuredContent.id);
-      expect(messages.structuredContent).toHaveLength(2);
+      expect(messages.structuredContent.messages).toHaveLength(2);
       
       // Verify messages are deleted by trying to retrieve them again
       const secondCheck = await checkForMessages(agent2.structuredContent.id);
-      expect(secondCheck.structuredContent).toHaveLength(0);
+      expect(secondCheck.structuredContent.messages).toHaveLength(0);
       
       // Send another message to verify the system still works
       await sendMessage(
@@ -186,8 +186,8 @@ describe('Tool Handlers', () => {
       );
       
       const thirdCheck = await checkForMessages(agent2.structuredContent.id);
-      expect(thirdCheck.structuredContent).toHaveLength(1);
-      expect(thirdCheck.structuredContent[0].message).toBe('New message after deletion');
+      expect(thirdCheck.structuredContent.messages).toHaveLength(1);
+      expect(thirdCheck.structuredContent.messages[0].message).toBe('New message after deletion');
     });
   });
 
@@ -202,7 +202,7 @@ describe('Tool Handlers', () => {
       
       // Verify agent is gone
       const agents = await discoverAgents();
-      expect(agents.structuredContent).toHaveLength(0);
+      expect(agents.structuredContent.agents).toHaveLength(0);
     });
 
     it('should return false for non-existent agent', async () => {

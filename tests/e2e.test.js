@@ -49,10 +49,10 @@ describe('End-to-End Multi-Agent Communication', () => {
 
     // Step 2: Verify all agents are registered
     const agents = await discoverAgents();
-    expect(agents.structuredContent).toHaveLength(3);
+    expect(agents.structuredContent.agents).toHaveLength(3);
     
     // Verify the agents we registered are in the list
-    const agentIds = agents.structuredContent.map(a => a.id);
+    const agentIds = agents.structuredContent.agents.map(a => a.id);
     expect(agentIds).toContain(developer.structuredContent.id);
     expect(agentIds).toContain(tester.structuredContent.id);
     expect(agentIds).toContain(architect.structuredContent.id);
@@ -67,8 +67,8 @@ describe('End-to-End Multi-Agent Communication', () => {
     // Step 4: Developer checks messages
     let devMessages = await checkForMessages(developer.structuredContent.id);
     
-    expect(devMessages.structuredContent).toHaveLength(1);
-    expect(devMessages.structuredContent[0].message).toContain('authentication module');
+    expect(devMessages.structuredContent.messages).toHaveLength(1);
+    expect(devMessages.structuredContent.messages[0].message).toContain('authentication module');
 
     // Step 5: Developer sends update to Architect and request to Tester
     await sendMessage(
@@ -86,8 +86,8 @@ describe('End-to-End Multi-Agent Communication', () => {
     // Step 6: Tester checks messages
     const testerMessages = await checkForMessages(tester.structuredContent.id);
     
-    expect(testerMessages.structuredContent).toHaveLength(1);
-    expect(testerMessages.structuredContent[0].from).toBe(developer.structuredContent.id);
+    expect(testerMessages.structuredContent.messages).toHaveLength(1);
+    expect(testerMessages.structuredContent.messages[0].from).toBe(developer.structuredContent.id);
 
     // Step 7: Tester sends bug report
     await sendMessage(
@@ -99,13 +99,13 @@ describe('End-to-End Multi-Agent Communication', () => {
     // Step 8: Developer checks for new messages
     devMessages = await checkForMessages(developer.structuredContent.id);
     
-    expect(devMessages.structuredContent).toHaveLength(1);
-    expect(devMessages.structuredContent[0].message).toContain('JWT token expiry');
+    expect(devMessages.structuredContent.messages).toHaveLength(1);
+    expect(devMessages.structuredContent.messages[0].message).toContain('JWT token expiry');
 
     // Step 9: Verify messages are deleted after retrieval
     const noNewMessages = await checkForMessages(developer.structuredContent.id);
     
-    expect(noNewMessages.structuredContent).toHaveLength(0);
+    expect(noNewMessages.structuredContent.messages).toHaveLength(0);
 
     // Step 10: Unregister an agent
     const unregResult = await unregisterAgent(tester.structuredContent.id);
@@ -114,7 +114,7 @@ describe('End-to-End Multi-Agent Communication', () => {
 
     // Verify agent is removed
     const remainingAgents = await discoverAgents();
-    expect(remainingAgents.structuredContent).toHaveLength(2);
+    expect(remainingAgents.structuredContent.agents).toHaveLength(2);
   });
 
   it('should handle error cases properly', async () => {

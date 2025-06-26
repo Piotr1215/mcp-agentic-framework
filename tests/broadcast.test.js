@@ -52,16 +52,16 @@ describe('Broadcast Feature', () => {
       const agent3Messages = await checkForMessages(agent3Id);
       const agent1Messages = await checkForMessages(agent1Id);
       
-      expect(agent2Messages.structuredContent.length).toBe(1);
-      expect(agent2Messages.structuredContent[0].message).toContain('Test broadcast message');
-      expect(agent2Messages.structuredContent[0].from).toBe(agent1Id);
+      expect(agent2Messages.structuredContent.messages.length).toBe(1);
+      expect(agent2Messages.structuredContent.messages[0].message).toContain('Test broadcast message');
+      expect(agent2Messages.structuredContent.messages[0].from).toBe(agent1Id);
       
-      expect(agent3Messages.structuredContent.length).toBe(1);
-      expect(agent3Messages.structuredContent[0].message).toContain('Test broadcast message');
-      expect(agent3Messages.structuredContent[0].from).toBe(agent1Id);
+      expect(agent3Messages.structuredContent.messages.length).toBe(1);
+      expect(agent3Messages.structuredContent.messages[0].message).toContain('Test broadcast message');
+      expect(agent3Messages.structuredContent.messages[0].from).toBe(agent1Id);
       
       // Sender should not receive their own broadcast
-      expect(agent1Messages.structuredContent.length).toBe(0);
+      expect(agent1Messages.structuredContent.messages.length).toBe(0);
     });
 
     it('should not deliver broadcast to sender', async () => {
@@ -76,7 +76,7 @@ describe('Broadcast Feature', () => {
 
       // Then: Agent1 should not receive its own broadcast
       const agent1Messages = await checkForMessages(agent1Id);
-      expect(agent1Messages.structuredContent.length).toBe(0);
+      expect(agent1Messages.structuredContent.messages.length).toBe(0);
     });
 
     it('should handle priority levels correctly', async () => {
@@ -94,10 +94,10 @@ describe('Broadcast Feature', () => {
 
       // Then: Messages should be received with correct priorities
       const messages = await checkForMessages(agent2Id);
-      expect(messages.structuredContent.length).toBe(3);
+      expect(messages.structuredContent.messages.length).toBe(3);
       
       // Check that all priority levels are present (order not guaranteed)
-      const messageTexts = messages.structuredContent.map(m => m.message);
+      const messageTexts = messages.structuredContent.messages.map(m => m.message);
       
       expect(messageTexts.some(m => m.includes('[BROADCAST LOW]') && m.includes('Low priority'))).toBe(true);
       expect(messageTexts.some(m => m.includes('[BROADCAST HIGH]') && m.includes('High priority'))).toBe(true);
@@ -120,8 +120,8 @@ describe('Broadcast Feature', () => {
       // Then: Broadcast should still be delivered
       expect(result.structuredContent.success).toBe(true);
       const messages = await checkForMessages(agent2Id);
-      expect(messages.structuredContent.length).toBe(1);
-      expect(messages.structuredContent[0].message).toContain('No subscription needed');
+      expect(messages.structuredContent.messages.length).toBe(1);
+      expect(messages.structuredContent.messages[0].message).toContain('No subscription needed');
     });
 
     it('should handle empty agent registry gracefully', async () => {
@@ -159,16 +159,16 @@ describe('Broadcast Feature', () => {
       expect(result1.structuredContent.success).toBe(true);
       
       const messages1 = await checkForMessages(agent2Id);
-      expect(messages1.structuredContent.length).toBe(1);
-      expect(messages1.structuredContent[0].message).toContain('First broadcast');
+      expect(messages1.structuredContent.messages.length).toBe(1);
+      expect(messages1.structuredContent.messages[0].message).toContain('First broadcast');
       
       // Send second broadcast and check
       const result2 = await sendBroadcast(agent1Id, 'Second broadcast', 'normal');
       expect(result2.structuredContent.success).toBe(true);
       
       const messages2 = await checkForMessages(agent2Id);
-      expect(messages2.structuredContent.length).toBe(1);
-      expect(messages2.structuredContent[0].message).toContain('Second broadcast');
+      expect(messages2.structuredContent.messages.length).toBe(1);
+      expect(messages2.structuredContent.messages[0].message).toContain('Second broadcast');
     });
   });
 });

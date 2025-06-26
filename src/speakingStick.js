@@ -312,9 +312,6 @@ export async function releaseSpeakingStick(releasingAgent, summary = '', passToS
       }, 'Cannot release - you do not hold the speaking stick', createMetadata(startTime));
     }
 
-    // Clear current holder
-    speakingStickState.currentHolder = null;
-
     // Determine next holder
     let nextHolder = null;
     
@@ -328,8 +325,17 @@ export async function releaseSpeakingStick(releasingAgent, summary = '', passToS
       nextHolder = speakingStickState.queue.shift();
     }
 
-    // Update state
-    speakingStickState.currentHolder = nextHolder;
+    // Update state - only clear if we have a next holder
+    if (nextHolder) {
+      speakingStickState.currentHolder = nextHolder;
+    } else {
+      // If no one to pass to, keep current holder!
+      // This prevents the "droppable stick" bug
+      return structuredResponse({
+        released: false,
+        error: 'Cannot release - no one in queue'
+      }, 'Cannot release - no one in queue to receive the stick', createMetadata(startTime));
+    }
 
     // Send notifications
     let notificationSent = false;

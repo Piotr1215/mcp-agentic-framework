@@ -20,7 +20,8 @@ import {
   setCommunicationMode,
   trackSpeakingViolation,
   nudgeSilentAgents,
-  getSpeakingStickStatus
+  getSpeakingStickStatus,
+  forceResetSpeakingStick
 } from './speakingStick.js';
 import { Errors, MCPError } from './errors.js';
 
@@ -116,6 +117,11 @@ async function handleToolCall(name, args) {
 
     case 'get-speaking-stick-status': {
       return await getSpeakingStickStatus();
+    }
+
+    case 'force-reset-speaking-stick': {
+      const { initiated_by } = args;
+      return await forceResetSpeakingStick(initiated_by);
     }
 
     default:

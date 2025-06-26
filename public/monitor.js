@@ -39,7 +39,8 @@ const elements = {
     markAllReadButton: document.getElementById('markAllReadButton'),
     cleanupButton: document.getElementById('cleanupButton'),
     showPanelButton: document.getElementById('showPanelButton'),
-    hideBroadcastsToggle: document.getElementById('hideBroadcastsToggle')
+    hideBroadcastsToggle: document.getElementById('hideBroadcastsToggle'),
+    speakingStickStatus: document.getElementById('speakingStickStatus')
 };
 
 // Fun emojis for agents
@@ -245,8 +246,8 @@ async function refreshAgents() {
         // Fetch speaking stick status
         await fetchSpeakingStickStatus();
         
-        if (result && result.structuredContent) {
-            state.agents = result.structuredContent;
+        if (result && result.structuredContent && result.structuredContent.agents) {
+            state.agents = result.structuredContent.agents;
             renderAgentList();
             updateStats();
             log(`Found ${state.agents.length} active agents`, 'info');
@@ -497,6 +498,27 @@ async function fetchSpeakingStickStatus() {
         if (data.success && data.speakingStick) {
             state.speakingStickHolder = data.speakingStick.currentHolder;
             state.speakingStickMode = data.speakingStick.mode;
+            
+            // Debug log
+            console.log('Speaking stick status:', {
+                mode: state.speakingStickMode,
+                holder: state.speakingStickHolder,
+                queue: data.speakingStick.queue
+            });
+            
+            // Update UI display
+            if (elements.speakingStickStatus) {
+                if (state.speakingStickMode === 'chaos') {
+                    elements.speakingStickStatus.innerHTML = '🎭 Chaos Mode';
+                    elements.speakingStickStatus.style.color = '#FF9800';
+                } else {
+                    const holderAgent = state.agents.find(a => a.id === state.speakingStickHolder);
+                    const holderName = holderAgent ? holderAgent.name : 'Unknown';
+                    const queueSize = data.speakingStick.queue ? data.speakingStick.queue.length : 0;
+                    elements.speakingStickStatus.innerHTML = `🎤 ${holderName} has stick (${queueSize} waiting)`;
+                    elements.speakingStickStatus.style.color = '#4CAF50';
+                }
+            }
             return true;
         }
     } catch (error) {
@@ -535,6 +557,16 @@ async function pollMessages() {
             const broadcastSignatures = new Set();
             
             allCombinedMessages.forEach(msg => {
+                // Filter out system messages
+                if (msg.message && (
+                    msg.message.includes('[MODE CHANGE]') ||
+                    msg.message.includes('speaking stick') ||
+                    msg.message.includes('Previous holder') ||
+                    msg.message.includes('summary:')
+                )) {
+                    return; // Skip these messages
+                }
+                
                 const isBroadcast = msg.to === 'BROADCAST' || 
                     msg.to === 'broadcast' || 
                     (msg.message && msg.message.includes('[BROADCAST')) ||
@@ -793,6 +825,9 @@ async function init() {
     }
     
     await refreshAgents();
+    
+    // Fetch initial speaking stick status
+    await fetchSpeakingStickStatus();
     
     // Show all messages by default
     renderChatView();

@@ -149,7 +149,7 @@ describe('Notification Tools', () => {
 
       const result = await getPendingNotifications(agentId);
 
-      expect(result.structuredContent).toEqual([]);
+      expect(result.structuredContent).toEqual({ notifications: [] });
       expect(result.content[0].text).toContain("No pending notifications for agent 'TestAgent'");
     });
 
@@ -169,7 +169,7 @@ describe('Notification Tools', () => {
       // Get pending notifications
       const result = await getPendingNotifications(agent2Id);
 
-      expect(result.structuredContent.length).toBeGreaterThan(0);
+      expect(result.structuredContent.notifications.length).toBeGreaterThan(0);
       expect(result.content[0].text).toContain('Retrieved');
     });
 
@@ -199,10 +199,10 @@ describe('Notification Tools', () => {
       // Check pending notifications
       const result = await getPendingNotifications(agent2Id);
       
-      expect(result.structuredContent.length).toBeGreaterThan(0);
+      expect(result.structuredContent.notifications.length).toBeGreaterThan(0);
       
       // Find broadcast notification
-      const broadcastNotif = result.structuredContent.find(n => 
+      const broadcastNotif = result.structuredContent.notifications.find(n => 
         n.method === 'broadcast/message'
       );
       expect(broadcastNotif).toBeDefined();
@@ -224,8 +224,8 @@ describe('Notification Tools', () => {
       // Check that observer received the notification
       const notifications = await getPendingNotifications(observerId);
       
-      expect(notifications.structuredContent).toHaveLength(1);
-      expect(notifications.structuredContent[0]).toMatchObject({
+      expect(notifications.structuredContent.notifications).toHaveLength(1);
+      expect(notifications.structuredContent.notifications[0]).toMatchObject({
         method: 'agent/registered',
         params: {
           agentId: newAgentId,
@@ -251,8 +251,8 @@ describe('Notification Tools', () => {
       // Check notifications
       const notifications = await getPendingNotifications(watcherId);
       
-      expect(notifications.structuredContent).toHaveLength(1);
-      expect(notifications.structuredContent[0]).toMatchObject({
+      expect(notifications.structuredContent.notifications).toHaveLength(1);
+      expect(notifications.structuredContent.notifications[0]).toMatchObject({
         method: 'agent/unregistered',
         params: {
           agentId: tempId
@@ -280,7 +280,7 @@ describe('Notification Tools', () => {
       const notifications = await getPendingNotifications(monitorId);
       
       // Count unique notification types
-      const uniqueMethods = [...new Set(notifications.structuredContent.map(n => n.method))];
+      const uniqueMethods = [...new Set(notifications.structuredContent.notifications.map(n => n.method))];
       
       // Should have: agent/registered (for both new agents), agent/statusChanged, agent/unregistered
       expect(uniqueMethods).toContain('agent/registered');
@@ -288,7 +288,7 @@ describe('Notification Tools', () => {
       expect(uniqueMethods).toContain('agent/unregistered');
       
       // Count specific notifications
-      const registeredCount = notifications.structuredContent.filter(n => n.method === 'agent/registered').length;
+      const registeredCount = notifications.structuredContent.notifications.filter(n => n.method === 'agent/registered').length;
       expect(registeredCount).toBe(2); // ActiveAgent and ThirdAgent
     });
 
@@ -303,11 +303,11 @@ describe('Notification Tools', () => {
       
       // First retrieval should have notifications
       const first = await getPendingNotifications(agentId);
-      expect(first.structuredContent).toHaveLength(1);
+      expect(first.structuredContent.notifications).toHaveLength(1);
       
       // Second retrieval should be empty
       const second = await getPendingNotifications(agentId);
-      expect(second.structuredContent).toHaveLength(0);
+      expect(second.structuredContent.notifications).toHaveLength(0);
     });
   });
 });
