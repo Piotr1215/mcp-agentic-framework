@@ -1,7 +1,75 @@
 export const speakingStickDefinitions = [
   {
+    name: 'grant-speaking-stick-to',
+    title: 'Grant Speaking Stick To',
+    description: 'Grant speaking stick to a specific agent (ruler only)',
+    inputSchema: {
+      $schema: 'http://json-schema.org/draft-07/schema#',
+      type: 'object',
+      properties: {
+        granting_agent: {
+          type: 'string',
+          description: 'ID of the ruler granting the stick',
+          minLength: 1
+        },
+        target_agent: {
+          type: 'string',
+          description: 'ID of the agent to receive the stick',
+          minLength: 1
+        },
+        topic: {
+          type: 'string',
+          description: 'Topic for discussion',
+          maxLength: 200,
+          default: ''
+        },
+        privilege_level: {
+          type: 'string',
+          enum: ['standard', 'expert', 'deep-analysis', 'leadership'],
+          description: 'What enhanced capabilities to grant',
+          default: 'standard'
+        }
+      },
+      required: ['granting_agent', 'target_agent'],
+      additionalProperties: false
+    },
+    outputSchema: {
+      $schema: 'http://json-schema.org/draft-07/schema#',
+      type: 'object',
+      properties: {
+        granted: {
+          type: 'boolean',
+          description: 'Whether the speaking stick was granted'
+        },
+        ruler: {
+          type: 'string',
+          description: 'ID of the ruler'
+        },
+        current_holder: {
+          type: 'string',
+          description: 'ID of new speaking stick holder'
+        },
+        current_holder_name: {
+          type: 'string',
+          description: 'Name of new speaking stick holder'
+        },
+        privileges_granted: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Special abilities granted to the holder'
+        },
+        enhanced_prompt: {
+          type: 'string',
+          description: 'The enhanced prompt modification they receive'
+        }
+      },
+      required: ['granted'],
+      additionalProperties: false
+    }
+  },
+  {
     name: 'request-speaking-stick',
-    title: 'Request Speaking Stick',
+    title: 'Request Speaking Stick (Deprecated)',
     description: 'Request exclusive communication rights with enhanced privileges',
     inputSchema: {
       $schema: 'http://json-schema.org/draft-07/schema#',

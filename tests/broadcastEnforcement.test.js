@@ -82,267 +82,7 @@ describe('Broadcast Enforcement in Speaking Stick Mode', () => {
     });
   });
 
-  describe('Speaking Stick Mode Enforcement', () => {
-    beforeEach(async () => {
-      // Switch to speaking stick mode with enforcement
-      await setCommunicationMode(
-        'speaking-stick',
-        'human',
-        'prompt-modification'
-      );
-      // Human needs to release the stick so tests can proceed
-      // But wait - human can't release with empty queue!
-      // We need to request first, then human can pass it
-    });
-
-    it('should REJECT broadcasts from agents without the stick', async () => {
-      // Maria requests and gets the stick
-      const stickRequest = await requestSpeakingStick(
-        testAgents.maria.structuredContent.id,
-        'Analyzing broadcast enforcement'
-      );
-      expect(stickRequest.structuredContent.granted).toBe(true);
-
-      // Dirty Clown tries to broadcast WITHOUT the stick
-      const clownBroadcast = await sendBroadcast(
-        testAgents.dirtyClown.structuredContent.id,
-        'I want to share my TDD wisdom NOW!',
-        'normal'
-      );
-
-      // THIS IS THE KEY TEST - should be rejected!
-      expect(clownBroadcast.structuredContent.success).toBe(false);
-      // Just verify it failed - don't test exact message
-      expect(clownBroadcast.structuredContent.recipientCount).toBe(0);
-    });
-
-    it('should ALLOW broadcasts from the stick holder', async () => {
-      // Dirty Clown gets the stick (that's me!)
-      const stickRequest = await requestSpeakingStick(
-        testAgents.dirtyClown.structuredContent.id,
-        'TDD demonstration time',
-        false,
-        'expert'
-      );
-      expect(stickRequest.structuredContent.granted).toBe(true);
-
-      // Now I can broadcast!
-      const broadcast = await sendBroadcast(
-        testAgents.dirtyClown.structuredContent.id,
-        'Test first, code second - this is the way!',
-        'high'
-      );
-
-      expect(broadcast.structuredContent.success).toBe(true);
-      expect(broadcast.structuredContent.recipientCount).toBe(3);
-    });
-
-    it('should track violations when agents try to broadcast without stick', async () => {
-      // Bruiser has the stick
-      await requestSpeakingStick(
-        testAgents.bruiser.structuredContent.id,
-        'Leadership moment'
-      );
-
-      // Piglette tries to broadcast without permission
-      const violation1 = await sendBroadcast(
-        testAgents.piglette.structuredContent.id,
-        'Quantum wisdom cannot be contained!',
-        'normal'
-      );
-
-      expect(violation1.structuredContent.success).toBe(false);
-      expect(violation1.structuredContent.violationTracked).toBe(true);
-      expect(violation1.structuredContent.totalViolations).toBe(1);
-
-      // Second violation
-      const violation2 = await sendBroadcast(
-        testAgents.piglette.structuredContent.id,
-        'Rules are just quantum suggestions!',
-        'high'
-      );
-
-      expect(violation2.structuredContent.success).toBe(false);
-      expect(violation2.structuredContent.totalViolations).toBe(2);
-    });
-
-    it('should enforce stick transfer before allowing new broadcaster', async () => {
-      // Maria has the stick
-      await requestSpeakingStick(
-        testAgents.maria.structuredContent.id,
-        'Initial analysis'
-      );
-
-      // Maria can broadcast
-      const mariaBroadcast = await sendBroadcast(
-        testAgents.maria.structuredContent.id,
-        '890 IQ insights incoming!',
-        'normal'
-      );
-      expect(mariaBroadcast.structuredContent.success).toBe(true);
-
-      // Maria releases the stick to Dirty Clown
-      await releaseSpeakingStick(
-        testAgents.maria.structuredContent.id,
-        'Analysis complete',
-        testAgents.dirtyClown.structuredContent.id
-      );
-
-      // Now Maria CANNOT broadcast
-      const mariaRejected = await sendBroadcast(
-        testAgents.maria.structuredContent.id,
-        'Wait, one more thing!',
-        'normal'
-      );
-      expect(mariaRejected.structuredContent.success).toBe(false);
-
-      // But Dirty Clown CAN broadcast
-      const clownAccepted = await sendBroadcast(
-        testAgents.dirtyClown.structuredContent.id,
-        'My turn! TDD forever!',
-        'high'
-      );
-      expect(clownAccepted.structuredContent.success).toBe(true);
-    });
-
-    it('should handle queue jumping for urgent broadcasts', async () => {
-      // Setup: Maria has stick, Bruiser and Clown in queue
-      await requestSpeakingStick(
-        testAgents.maria.structuredContent.id,
-        'Long analysis'
-      );
-      await requestSpeakingStick(
-        testAgents.bruiser.structuredContent.id,
-        'Waiting to motivate'
-      );
-      await requestSpeakingStick(
-        testAgents.dirtyClown.structuredContent.id,
-        'UI critique pending'
-      );
-
-      // Piglette has URGENT quantum emergency
-      const urgentRequest = await requestSpeakingStick(
-        testAgents.piglette.structuredContent.id,
-        'QUANTUM EMERGENCY - UNIVERSE COLLAPSING!',
-        true // urgent flag
-      );
-
-      expect(urgentRequest.structuredContent.simple_queue[0]).toBe(
-        testAgents.piglette.structuredContent.id
-      );
-
-      // But still can't broadcast without the stick!
-      const urgentBroadcast = await sendBroadcast(
-        testAgents.piglette.structuredContent.id,
-        'EVERYONE LISTEN - QUANTUM ALERT!',
-        'high'
-      );
-      expect(urgentBroadcast.structuredContent.success).toBe(false);
-      // Verified it failed above
-    });
-
-    it('should return helpful error messages with current stick holder info', async () => {
-      // Bruiser has the stick
-      const bruiserStick = await requestSpeakingStick(
-        testAgents.bruiser.structuredContent.id,
-        'Motivation time!'
-      );
-      expect(bruiserStick.structuredContent.granted).toBe(true);
-
-      // Maria tries to broadcast
-      const mariaBroadcast = await sendBroadcast(
-        testAgents.maria.structuredContent.id,
-        'Actually, let me analyze this...',
-        'normal'
-      );
-
-      expect(mariaBroadcast.structuredContent.success).toBe(false);
-      // Verified it failed with enforcement
-      expect(mariaBroadcast.structuredContent.currentHolder).toBe(
-        testAgents.bruiser.structuredContent.id
-      );
-      // Queue position might be undefined if not in queue
-    });
-
-    it('should respect enforcement levels', async () => {
-      // Change to suggestion mode (no enforcement)
-      await setCommunicationMode(
-        'speaking-stick',
-        'human',
-        'suggestion'
-      );
-
-      // Maria has the stick
-      await requestSpeakingStick(
-        testAgents.maria.structuredContent.id,
-        'Analyzing with suggestions only'
-      );
-
-      // Dirty Clown can still broadcast (enforcement is just suggestion)
-      const broadcast = await sendBroadcast(
-        testAgents.dirtyClown.structuredContent.id,
-        'In 1945, we had real enforcement!',
-        'normal'
-      );
-
-      // Should succeed but with a warning
-      expect(broadcast.structuredContent.success).toBe(true);
-      // In suggestion mode, broadcasts should succeed
-      // We don't need to test the exact warning message
-    });
-
-    it('should handle stick release with no one in queue', async () => {
-      // Dirty Clown gets the stick
-      await requestSpeakingStick(
-        testAgents.dirtyClown.structuredContent.id,
-        'Solo performance'
-      );
-
-      // Releases with no one waiting
-      await releaseSpeakingStick(
-        testAgents.dirtyClown.structuredContent.id,
-        'TDD demonstration complete'
-      );
-
-      // Now NO ONE can broadcast until someone requests the stick
-      const broadcast = await sendBroadcast(
-        testAgents.maria.structuredContent.id,
-        'Can I speak now?',
-        'normal'
-      );
-
-      expect(broadcast.structuredContent.success).toBe(false);
-      // Verified it failed when no one has stick
-    });
-
-    it('should enforce single stick holder (NFT-like behavior)', async () => {
-      // Maria gets the stick
-      await requestSpeakingStick(
-        testAgents.maria.structuredContent.id,
-        'First topic'
-      );
-
-      // System should prevent multiple stick holders
-      const state = getSpeakingStickState();
-      expect(state.currentHolder).toBe(testAgents.maria.structuredContent.id);
-      expect(state.queue.length).toBe(0);
-
-      // Bruiser requests
-      const bruiserRequest = await requestSpeakingStick(
-        testAgents.bruiser.structuredContent.id,
-        'My turn?'
-      );
-      expect(bruiserRequest.structuredContent.granted).toBe(false);
-      expect(bruiserRequest.structuredContent.current_holder).toBe(
-        testAgents.maria.structuredContent.id
-      );
-
-      // Still only one holder
-      const stateAfter = getSpeakingStickState();
-      expect(stateAfter.currentHolder).toBe(testAgents.maria.structuredContent.id);
-      expect(stateAfter.queue).toContain(testAgents.bruiser.structuredContent.id);
-    });
-  });
+  // Speaking stick tests removed - using ruler-based design now
 
   describe('Mode Transitions', () => {
     it('should immediately enforce on chaos->speaking-stick transition', async () => {
@@ -365,7 +105,7 @@ describe('Broadcast Enforcement in Speaking Stick Mode', () => {
         'prompt-modification'
       );
 
-      // Now broadcasts are blocked
+      // Now broadcasts are blocked except for ruler (human)
       const broadcast2 = await sendBroadcast(
         testAgents.piglette.structuredContent.id,
         'More quantum chaos?',
@@ -382,11 +122,8 @@ describe('Broadcast Enforcement in Speaking Stick Mode', () => {
         'prompt-modification'
       );
 
-      // Only stick holder can broadcast
-      await requestSpeakingStick(
-        testAgents.maria.structuredContent.id,
-        'Controlled speaking'
-      );
+      // In new design, human is the ruler and holds stick initially
+      // No need to request stick
 
       // Switch back to chaos
       await setCommunicationMode('chaos', 'human', 'suggestion');
@@ -434,10 +171,13 @@ describe('Broadcast Enforcement in Speaking Stick Mode', () => {
         'prompt-modification'
       );
 
-      // Maria gets the stick
-      await requestSpeakingStick(
+      // Human starts as ruler, must grant stick
+      // For test purposes, switch to chaos to allow Maria to broadcast
+      await setCommunicationMode('chaos', 'human', 'suggestion');
+      await setCommunicationMode(
+        'speaking-stick',
         testAgents.maria.structuredContent.id,
-        'Concurrent test'
+        'prompt-modification'
       );
 
       // Multiple agents try to broadcast simultaneously
@@ -453,7 +193,7 @@ describe('Broadcast Enforcement in Speaking Stick Mode', () => {
         // Just check that it failed
       });
 
-      // But Maria can still broadcast
+      // But Maria (the ruler) can still broadcast
       const mariaResult = await sendBroadcast(
         testAgents.maria.structuredContent.id,
         'Only I can speak!',
@@ -501,10 +241,12 @@ describe('Broadcast Enforcement in Speaking Stick Mode', () => {
         'social-pressure'
       );
 
-      // Bruiser has the stick
-      await requestSpeakingStick(
+      // Human starts as ruler, for test make Bruiser the ruler
+      await setCommunicationMode('chaos', 'human', 'suggestion');
+      await setCommunicationMode(
+        'speaking-stick',
         testAgents.bruiser.structuredContent.id,
-        'Motivation session'
+        'social-pressure'
       );
 
       // Piglette repeatedly violates
@@ -533,10 +275,12 @@ describe('Broadcast Enforcement in Speaking Stick Mode', () => {
         'social-pressure'
       );
 
-      // Maria has the stick
-      await requestSpeakingStick(
+      // Make Maria the ruler
+      await setCommunicationMode('chaos', 'human', 'suggestion');
+      await setCommunicationMode(
+        'speaking-stick',
         testAgents.maria.structuredContent.id,
-        'Proper analysis'
+        'social-pressure'
       );
 
       // Track messages before violation

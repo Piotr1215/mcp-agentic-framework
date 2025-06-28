@@ -19,6 +19,7 @@ import {
 } from './tools.js';
 import {
   requestSpeakingStick,
+  grantSpeakingStickTo,
   releaseSpeakingStick,
   setCommunicationMode,
   trackSpeakingViolation,
@@ -121,6 +122,11 @@ export function createServer() {
           return await getPendingNotifications(agent_id);
         }
 
+        case 'grant-speaking-stick-to': {
+          const { granting_agent, target_agent, topic, privilege_level } = args;
+          return await grantSpeakingStickTo(granting_agent, target_agent, topic, privilege_level);
+        }
+        
         case 'request-speaking-stick': {
           const { requesting_agent, topic, urgent, privilege_level } = args;
           return await requestSpeakingStick(requesting_agent, topic, urgent, privilege_level);

@@ -5,6 +5,7 @@ import { getAgentRegistry, getMessageStore } from './tools.js';
 let speakingStickState = {
   mode: 'chaos', // 'chaos' or 'speaking-stick'
   currentHolder: null,
+  ruler: null, // The agent who initiated speaking-stick mode and controls stick grants
   queue: [],
   violations: {}, // agent_id -> violation count
   lastActivity: {}, // agent_id -> last activity timestamp
@@ -59,6 +60,7 @@ export function getSpeakingStickState() {
   return {
     mode: speakingStickState.mode,
     currentHolder: speakingStickState.currentHolder,
+    ruler: speakingStickState.ruler,
     queue: [...speakingStickState.queue],
     enforcementLevel: speakingStickState.enforcementLevel,
     quietMode: speakingStickState.quietMode,
@@ -99,6 +101,15 @@ export async function getSpeakingStickStatus() {
     const registry = getAgentRegistry();
     const state = { ...speakingStickState };
     
+    // Get ruler details
+    let rulerName = null;
+    if (state.ruler) {
+      const ruler = await registry.getAgent(state.ruler);
+      if (ruler) {
+        rulerName = ruler.name;
+      }
+    }
+    
     // Get holder details
     let currentHolderName = null;
     let currentHolderPrivileges = [];
@@ -110,7 +121,7 @@ export async function getSpeakingStickStatus() {
       // TODO: Track privileges when stick is granted
     }
     
-    // Get queue details with names
+    // Get queue details with names (kept for legacy)
     const queueDetails = [];
     for (const agentId of state.queue) {
       const agent = await registry.getAgent(agentId);
@@ -119,7 +130,7 @@ export async function getSpeakingStickStatus() {
           id: agentId,
           name: agent.name,
           position: queueDetails.length + 1,
-          urgent: false // TODO: Track urgent requests
+          urgent: false
         });
       }
     }
@@ -128,19 +139,23 @@ export async function getSpeakingStickStatus() {
     let statusMessage = '';
     if (state.mode === 'chaos') {
       statusMessage = 'In chaos mode - everyone can broadcast freely';
+    } else if (state.ruler && state.currentHolder === state.ruler) {
+      statusMessage = `${rulerName} is the ruler and currently holds the speaking stick`;
     } else if (state.currentHolder) {
-      statusMessage = `${currentHolderName} has the speaking stick with ${state.queue.length} agent${state.queue.length === 1 ? '' : 's'} waiting`;
+      statusMessage = `${currentHolderName} has the speaking stick (granted by ruler ${rulerName})`;
     } else {
-      statusMessage = 'Speaking stick is available - no one currently holds it';
+      statusMessage = 'Speaking stick mode active - waiting for ruler to grant stick';
     }
     
     return structuredResponse({
       mode: state.mode,
+      ruler: state.ruler,
+      ruler_name: rulerName,
       enforcement_level: state.enforcementLevel,
       current_holder: state.currentHolder,
       current_holder_name: currentHolderName,
       current_holder_privileges: currentHolderPrivileges,
-      stick_available: state.mode === 'chaos' || (!state.currentHolder && state.mode === 'speaking-stick'),
+      stick_available: state.mode === 'chaos' || (state.currentHolder === state.ruler),
       queue_length: state.queue.length,
       queue: queueDetails,
       total_violations: Object.values(state.violations).reduce((sum, count) => sum + count, 0)
@@ -199,103 +214,65 @@ export async function forceResetSpeakingStick(initiatedBy = 'system') {
 }
 
 /**
- * Request the speaking stick
+ * Grant speaking stick to a specific agent (ruler only)
  */
-export async function requestSpeakingStick(requestingAgent, topic, urgent = false, privilegeLevel = 'standard') {
+export async function grantSpeakingStickTo(grantingAgent, targetAgent, topic = '', privilegeLevel = 'standard') {
   const startTime = Date.now();
   try {
-    const registry = getAgentRegistry();
-    const agent = await registry.getAgent(requestingAgent);
-    
-    if (!agent) {
-      return textResponse('Agent not found', createMetadata(startTime));
-    }
-
-    // Update last activity
-    speakingStickState.lastActivity[requestingAgent] = new Date();
-
-    // Get violation count for this agent
-    const violationCount = speakingStickState.violations[requestingAgent] || 0;
-
-    // If no current holder, grant immediately
-    if (!speakingStickState.currentHolder) {
-      speakingStickState.currentHolder = requestingAgent;
-      
-      const privileges = PRIVILEGE_DEFINITIONS[privilegeLevel];
-      
-      // Notify all agents about new speaking stick holder
-      await broadcastToAllAgents({
-        type: 'speaking-stick-granted',
-        holder: requestingAgent,
-        topic,
-        privileges: privileges.privileges,
-        prompt: privileges.prompt
-      });
-
+    // Only ruler can grant
+    if (speakingStickState.mode === 'speaking-stick' && grantingAgent !== speakingStickState.ruler) {
       return structuredResponse({
-        granted: true,
-        current_holder: requestingAgent,
-        simple_queue: [],
-        violation_count: violationCount,
-        privileges_granted: privileges.privileges,
-        enhanced_prompt: privileges.prompt
-      }, `Speaking stick granted to ${requestingAgent} for topic: ${topic}`, createMetadata(startTime));
+        error: 'not_ruler',
+        ruler: speakingStickState.ruler,
+        message: 'Only the ruler can grant the speaking stick'
+      }, 'Error: Only the ruler can grant the speaking stick', createMetadata(startTime));
+    }
+    
+    const registry = getAgentRegistry();
+    const targetAgentData = await registry.getAgent(targetAgent);
+    
+    if (!targetAgentData) {
+      return textResponse('Target agent not found', createMetadata(startTime));
     }
 
-    // Add to queue
-    if (urgent) {
-      speakingStickState.queue.unshift(requestingAgent);
-    } else {
-      // If agent has violations, they go to back of queue
-      if (violationCount >= 3 && VIOLATION_CONSEQUENCES.moderate.queuePenalty) {
-        speakingStickState.queue.push(requestingAgent);
-      } else {
-        // Normal queue position
-        const position = speakingStickState.queue.indexOf(requestingAgent);
-        if (position === -1) {
-          speakingStickState.queue.push(requestingAgent);
-        }
-      }
-    }
+    // Update speaking stick holder
+    speakingStickState.currentHolder = targetAgent;
+    speakingStickState.lastActivity[targetAgent] = new Date();
+    
+    const privileges = PRIVILEGE_DEFINITIONS[privilegeLevel];
+    
+    // Notify all agents about new speaking stick holder
+    await broadcastToAllAgents({
+      type: 'speaking-stick-granted',
+      holder: targetAgent,
+      granted_by: grantingAgent,
+      topic,
+      privileges: privileges.privileges,
+      prompt: privileges.prompt
+    });
 
-    // Get queue details with names
-    const queueDetails = [];
-    for (const agentId of speakingStickState.queue) {
-      const queueAgent = await registry.getAgent(agentId);
-      if (queueAgent) {
-        queueDetails.push({
-          id: agentId,
-          name: queueAgent.name,
-          position: queueDetails.length + 1
-        });
-      }
-    }
-    
-    // Get current holder name
-    let currentHolderName = 'Unknown';
-    if (speakingStickState.currentHolder) {
-      const holder = await registry.getAgent(speakingStickState.currentHolder);
-      if (holder) {
-        currentHolderName = holder.name;
-      }
-    }
-    
-    const queuePosition = speakingStickState.queue.indexOf(requestingAgent) + 1;
-    
     return structuredResponse({
-      granted: false,
-      current_holder: speakingStickState.currentHolder,
-      current_holder_name: currentHolderName,
-      simple_queue: [...speakingStickState.queue],
-      queue_details: queueDetails,
-      queue_position: queuePosition,
-      violation_count: violationCount,
-      privileges_granted: [],
-      enhanced_prompt: ''
-    }, `Speaking stick request queued. ${currentHolderName} currently has the stick. You are #${queuePosition} in queue.`, createMetadata(startTime));
+      granted: true,
+      ruler: speakingStickState.ruler,
+      current_holder: targetAgent,
+      current_holder_name: targetAgentData.name,
+      privileges_granted: privileges.privileges,
+      enhanced_prompt: privileges.prompt
+    }, `Speaking stick granted to ${targetAgentData.name} by ruler`, createMetadata(startTime));
   } catch (error) {
     return textResponse(`Error: ${error.message}`, createMetadata(startTime));
   }
+}
+
+/**
+ * Request the speaking stick (deprecated - kept for compatibility)
+ */
+export async function requestSpeakingStick(requestingAgent, topic, urgent = false, privilegeLevel = 'standard') {
+  const startTime = Date.now();
+  return structuredResponse({
+    error: 'deprecated',
+    message: 'This method is deprecated. Use grantSpeakingStickTo if you are the ruler.'
+  }, 'This method is deprecated in ruler-based speaking stick mode', createMetadata(startTime));
 }
 
 /**
@@ -312,6 +289,33 @@ export async function releaseSpeakingStick(releasingAgent, summary = '', passToS
       }, 'Cannot release - you do not hold the speaking stick', createMetadata(startTime));
     }
 
+    // In ruler mode, stick ALWAYS returns to ruler
+    if (speakingStickState.mode === 'speaking-stick' && speakingStickState.ruler) {
+      // Return stick to ruler
+      speakingStickState.currentHolder = speakingStickState.ruler;
+      
+      // Get ruler name
+      const ruler = await registry.getAgent(speakingStickState.ruler);
+      const rulerName = ruler ? ruler.name : speakingStickState.ruler;
+      
+      // Notify about return to ruler
+      await broadcastToAllAgents({
+        type: 'speaking-stick-returned-to-ruler',
+        from: releasingAgent,
+        to: speakingStickState.ruler,
+        summary
+      });
+      
+      return structuredResponse({
+        released: true,
+        returned_to_ruler: true,
+        ruler: speakingStickState.ruler,
+        ruler_name: rulerName,
+        summary
+      }, `Speaking stick returned to ruler ${rulerName}`, createMetadata(startTime));
+    }
+    
+    // Legacy queue-based behavior (for chaos mode or if no ruler)
     // Determine next holder
     let nextHolder = null;
     
@@ -325,16 +329,12 @@ export async function releaseSpeakingStick(releasingAgent, summary = '', passToS
       nextHolder = speakingStickState.queue.shift();
     }
 
-    // Update state - only clear if we have a next holder
+    // Update state
     if (nextHolder) {
       speakingStickState.currentHolder = nextHolder;
     } else {
-      // If no one to pass to, keep current holder!
-      // This prevents the "droppable stick" bug
-      return structuredResponse({
-        released: false,
-        error: 'Cannot release - no one in queue'
-      }, 'Cannot release - no one in queue to receive the stick', createMetadata(startTime));
+      // No one to pass to - in chaos mode, stick becomes available
+      speakingStickState.currentHolder = null;
     }
 
     // Send notifications
@@ -396,6 +396,18 @@ export async function setCommunicationMode(mode, initiatedBy, enforcementLevel) 
     const previousMode = speakingStickState.mode;
     speakingStickState.mode = mode;
     speakingStickState.enforcementLevel = enforcementLevel;
+    
+    // When switching to speaking-stick mode, initiator becomes the ruler
+    if (mode === 'speaking-stick') {
+      speakingStickState.ruler = initiatedBy;
+      speakingStickState.currentHolder = initiatedBy; // Ruler starts with the stick
+      speakingStickState.queue = []; // Clear any existing queue
+    } else if (mode === 'chaos') {
+      // Clear ruler and holder when switching back to chaos
+      speakingStickState.ruler = null;
+      speakingStickState.currentHolder = null;
+      speakingStickState.queue = [];
+    }
 
     const registry = getAgentRegistry();
     const agents = await registry.getAllAgents();
@@ -407,15 +419,21 @@ export async function setCommunicationMode(mode, initiatedBy, enforcementLevel) 
       previous_mode: previousMode,
       new_mode: mode,
       enforcement_level: enforcementLevel,
-      initiated_by: initiatedBy
+      initiated_by: initiatedBy,
+      ruler: speakingStickState.ruler
     });
 
     return structuredResponse({
       previous_mode: previousMode,
       new_mode: mode,
+      ruler: speakingStickState.ruler,
+      current_holder: speakingStickState.currentHolder,
       enforcement_active: enforcementLevel !== 'suggestion',
       agents_notified: allAgents
-    }, `Communication mode changed from ${previousMode} to ${mode}`, createMetadata(startTime));
+    }, mode === 'speaking-stick' ? 
+      `Speaking-stick mode activated. ${initiatedBy} is the ruler and holds the stick.` : 
+      `Communication mode changed from ${previousMode} to ${mode}`, 
+      createMetadata(startTime));
   } catch (error) {
     return textResponse(`Error: ${error.message}`, createMetadata(startTime));
   }
