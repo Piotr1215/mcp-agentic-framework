@@ -164,7 +164,8 @@ describe('MCP Server', () => {
         'send-message',
         'check-for-messages',
         'update-agent-status',
-        'send-broadcast'
+        'send-broadcast',
+        'agent-ai-assist'
       ]);
     });
 

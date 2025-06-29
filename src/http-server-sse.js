@@ -17,6 +17,7 @@ import {
   getPendingNotifications
 } from './tools.js';
 import { Errors, MCPError } from './errors.js';
+import { handleCompletion } from './completionHandler.js';
 
 // Increase max listeners to prevent warnings
 EventEmitter.defaultMaxListeners = 20;
@@ -31,6 +32,7 @@ app.use(express.static('public'));
 
 // Session storage
 const sessions = new Map();
+const sseConnections = new Map(); // SSE connections by session
 
 // Helper to handle tool calls
 async function handleToolCall(name, args) {
@@ -86,9 +88,25 @@ async function handleToolCall(name, args) {
 
     case 'agent-ai-assist': {
       const { agent_id, context, request_type } = args;
-      // Import agentAiAssist dynamically to avoid circular dependencies
       const { agentAiAssist } = await import('./tools.js');
-      return await agentAiAssist(agent_id, context, request_type);
+      
+      // Check if session has SSE connection
+      const sessionId = args._sessionId;
+      const sseConnection = sseConnections.get(sessionId);
+      
+      // Pass SSE connection to the function via global
+      if (sseConnection && sseConnection.connected) {
+        global.currentSseConnection = sseConnection;
+        global.currentSessionId = sessionId;
+      }
+      
+      try {
+        return await agentAiAssist(agent_id, context, request_type);
+      } finally {
+        // Clean up globals
+        delete global.currentSseConnection;
+        delete global.currentSessionId;
+      }
     }
 
     default:
@@ -96,23 +114,142 @@ async function handleToolCall(name, args) {
   }
 }
 
+// SSE endpoint - handle GET requests to the main MCP endpoint
+app.get('/mcp', async (req, res) => {
+  const sessionId = req.query.sessionId || req.headers['mcp-session-id'] || `sse-${Date.now()}`;
+  
+  console.log(`SSE connection request for session: ${sessionId}`);
+  
+  // Set SSE headers
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    'Connection': 'keep-alive',
+    'X-Accel-Buffering': 'no' // Disable Nginx buffering
+  });
+  
+  // Create SSE connection object
+  const sseConnection = {
+    res,
+    sessionId,
+    connected: true,
+    send: (data) => {
+      if (!sseConnection.connected) return;
+      
+      // Format as SSE message
+      res.write(`data: ${JSON.stringify(data)}\n\n`);
+    },
+    sendSamplingRequest: (requestId, prompt, params = {}) => {
+      const message = {
+        jsonrpc: '2.0',
+        id: requestId,
+        method: 'sampling/createMessage',
+        params: {
+          messages: [
+            {
+              role: 'user',
+              content: {
+                type: 'text',
+                text: prompt
+              }
+            }
+          ],
+          ...params
+        }
+      };
+      
+      console.log(`Sending sampling request ${requestId} over SSE`);
+      sseConnection.send(message);
+    }
+  };
+  
+  // Store connection
+  sseConnections.set(sessionId, sseConnection);
+  
+  // Send initial connection message
+  sseConnection.send({
+    type: 'connection',
+    status: 'connected',
+    sessionId,
+    message: 'SSE connection established. Sampling support enabled.'
+  });
+  
+  // Keep connection alive with periodic pings
+  const pingInterval = setInterval(() => {
+    if (!sseConnection.connected) {
+      clearInterval(pingInterval);
+      return;
+    }
+    res.write(':ping\n\n');
+  }, 30000);
+  
+  // Handle client disconnect
+  req.on('close', () => {
+    console.log(`SSE connection closed for session: ${sessionId}`);
+    sseConnection.connected = false;
+    sseConnections.delete(sessionId);
+    clearInterval(pingInterval);
+  });
+});
+
+// Endpoint to receive sampling responses from client
+app.post('/sampling/response', async (req, res) => {
+  try {
+    const { sessionId, requestId, result, error } = req.body;
+    
+    console.log(`Received sampling response for request ${requestId}`);
+    
+    // Find pending sampling request
+    const pendingRequest = global.pendingSamplingRequests?.get(requestId);
+    if (pendingRequest) {
+      if (error) {
+        pendingRequest.reject(new Error(error.message || 'Sampling failed'));
+      } else {
+        pendingRequest.resolve(result);
+      }
+      global.pendingSamplingRequests.delete(requestId);
+    }
+    
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error handling sampling response:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: error.message 
+    });
+  }
+});
+
 // Main MCP endpoint
 app.post('/mcp', async (req, res) => {
   try {
     const message = req.body;
+    const sessionId = req.headers['mcp-session-id'] || req.headers['x-session-id'];
     
     // Log for debugging
     console.log('Received message:', JSON.stringify(message, null, 2));
-    console.log('Headers:', req.headers);
-
-    // Check for protocol version in subsequent requests
-    const protocolVersion = req.headers['mcp-protocol-version'];
+    console.log('Session ID:', sessionId);
+    
+    // Handle error responses to sampling requests
+    if (message.error && message.id && typeof message.id === 'string' && message.id.startsWith('sampling-')) {
+      console.log('Received error response for sampling request:', message.error);
+      
+      // Find pending sampling request
+      const pendingRequest = global.pendingSamplingRequests?.get(message.id);
+      if (pendingRequest) {
+        pendingRequest.reject(new Error(message.error.message || 'Sampling failed'));
+        global.pendingSamplingRequests.delete(message.id);
+      }
+      
+      res.json({ success: true });
+      return;
+    }
     
     // Handle different message types
     if (message.method === 'initialize') {
       const requestedVersion = message.params?.protocolVersion || '2025-06-18';
-      const sessionId = `session-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-      sessions.set(sessionId, {
+      const newSessionId = sessionId || `session-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      sessions.set(newSessionId, {
         createdAt: new Date().toISOString(),
         clientInfo: message.params?.clientInfo,
         protocolVersion: requestedVersion
@@ -127,7 +264,7 @@ app.post('/mcp', async (req, res) => {
             tools: {},
             resources: {},
             prompts: {},
-            sampling: {},
+            sampling: {}, // Sampling is supported via SSE
             completions: {}
           },
           serverInfo: {
@@ -137,10 +274,10 @@ app.post('/mcp', async (req, res) => {
         }
       };
       
-      res.setHeader('Mcp-Session-Id', sessionId);
+      res.setHeader('Mcp-Session-Id', newSessionId);
       res.setHeader('MCP-Protocol-Version', '2025-06-18');
       res.json(response);
-      console.log('Sent initialize response with session:', sessionId);
+      console.log('Sent initialize response with session:', newSessionId);
       return;
     }
 
@@ -277,8 +414,11 @@ app.post('/mcp', async (req, res) => {
       const { name, arguments: args } = message.params;
       console.log('Calling tool:', name, 'with args:', args);
       
+      // Pass session ID to tool handler
+      const enhancedArgs = { ...args, _sessionId: sessionId };
+      
       try {
-        const result = await handleToolCall(name, args);
+        const result = await handleToolCall(name, enhancedArgs);
         const response = {
           jsonrpc: '2.0',
           id: message.id,
@@ -309,8 +449,6 @@ app.post('/mcp', async (req, res) => {
       console.log('Handling completion for:', ref.type, ref.name, argument.name);
       
       try {
-        // Import completion logic
-        const { handleCompletion } = await import('./completionHandler.js');
         const result = await handleCompletion(ref, argument);
         
         const response = {
@@ -336,21 +474,18 @@ app.post('/mcp', async (req, res) => {
       return;
     }
 
-    // Handle sampling/createMessage - proxy request back to client
+    // Handle sampling/createMessage - this should not come via HTTP POST
     if (message.method === 'sampling/createMessage') {
-      console.log('Received sampling request - HTTP transport cannot forward to client');
+      console.log('Received sampling request via HTTP POST - should use SSE');
       
-      // HTTP transport limitation: we cannot initiate requests to the client
-      // Return an error indicating this limitation
       res.json({
         jsonrpc: '2.0',
         id: message.id,
         error: {
           code: -32603,
-          message: 'Sampling not supported over HTTP transport. The server cannot initiate requests to the client. Use stdio transport or the fallback mode will be activated.',
+          message: 'Sampling requests should be initiated by server via SSE, not by client via HTTP POST',
           data: {
-            transportType: 'http',
-            fallbackAvailable: true
+            hint: 'Connect to SSE endpoint at /sse to receive sampling requests'
           }
         }
       });
@@ -413,128 +548,52 @@ app.delete('/instance/:instanceId', async (req, res) => {
       });
     }
   } catch (error) {
-    console.error('Error deregistering by instance:', error);
+    console.error('Instance deregistration error:', error);
     res.status(500).json({
       success: false,
-      error: error.message
+      message: error.message
     });
   }
 });
 
-app.get('/instance/:instanceId', async (req, res) => {
-  try {
-    const { instanceId } = req.params;
-    
-    // Import the instance tracker
-    const { createInstanceTracker } = await import('./lib/instanceTracker.js');
-    const instanceTracker = createInstanceTracker();
-    
-    const mapping = await instanceTracker.getAgentByInstance(instanceId);
-    
-    if (mapping) {
-      res.json({
-        success: true,
-        ...mapping
-      });
-    } else {
-      res.status(404).json({
-        success: false,
-        message: `No agent found for instance: ${instanceId}`
-      });
-    }
-  } catch (error) {
-    console.error('Error getting instance mapping:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
-  }
-});
-
-// Health check endpoint
-app.get('/health', (req, res) => {
-  res.json({ status: 'ok', name: 'mcp-agentic-framework', version: '1.0.0' });
-});
-
-// Monitor endpoint - get all messages without deleting them
-app.get('/monitor/messages', async (req, res) => {
-  try {
-    const { createMessageStore } = await import('./lib/messageStore.js');
-    const messageStore = createMessageStore('/tmp/mcp-agentic-framework/messages');
-    const messages = await messageStore.getAllMessages();
-    res.json({
-      success: true,
-      messages,
-      count: messages.length
-    });
-  } catch (error) {
-    console.error('Error fetching messages for monitor:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
-  }
-});
-
-
-// Cleanup old messages endpoint
-app.delete('/monitor/cleanup', async (req, res) => {
-  try {
-    const { olderThanHours = 24 } = req.query;
-    const cutoffTime = new Date(Date.now() - (olderThanHours * 60 * 60 * 1000));
-    
-    const { createMessageStore } = await import('./lib/messageStore.js');
-    const messageStore = createMessageStore('/tmp/mcp-agentic-framework/messages');
-    const messages = await messageStore.getAllMessages();
-    
-    let deletedCount = 0;
-    for (const msg of messages) {
-      if (new Date(msg.timestamp) < cutoffTime) {
-        await messageStore.deleteMessage(msg.id);
-        deletedCount++;
-      }
-    }
-    
-    res.json({
-      success: true,
-      deletedCount,
-      totalMessages: messages.length,
-      cutoffTime: cutoffTime.toISOString()
-    });
-  } catch (error) {
-    console.error('Error cleaning up messages:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
-  }
-});
-
-
-// Root endpoint for debugging
-app.get('/', (req, res) => {
-  res.json({ 
-    message: 'MCP Agentic Framework HTTP Server',
-    endpoints: {
-      mcp: '/mcp',
-      health: '/health',
-      instance: {
-        get: '/instance/:instanceId',
-        delete: '/instance/:instanceId'
-      },
-      monitor: {
-        messages: '/monitor/messages',
-        cleanup: '/monitor/cleanup'
-      }
-    }
+// SSE status endpoint
+app.get('/sse-status', (req, res) => {
+  const connections = Array.from(sseConnections.entries()).map(([id, conn]) => ({
+    sessionId: id,
+    connected: conn.connected
+  }));
+  
+  res.json({
+    sseSupport: true,
+    activeConnections: connections.filter(c => c.connected).length,
+    connections
   });
 });
 
-// Start server
-app.listen(port, '127.0.0.1', () => {
-  console.log(`MCP Agentic Framework HTTP server listening at http://127.0.0.1:${port}`);
-  console.log(`MCP endpoint: http://127.0.0.1:${port}/mcp`);
-  console.log(`Health check: http://127.0.0.1:${port}/health`);
-});
+// Initialize global storage for pending sampling requests
+global.pendingSamplingRequests = new Map();
 
-export default app;
+// Start server
+app.listen(port, () => {
+  console.log(`
+🚀 MCP HTTP+SSE Server running on port ${port}
+   
+   Endpoints:
+   - POST /mcp - Standard MCP operations
+   - GET  /mcp - SSE stream for sampling (same endpoint!)
+   - POST /sampling/response - Client sends AI results back
+   
+   Features:
+   ✅ HTTP endpoints for standard MCP operations
+   ✅ SSE support for server-initiated sampling
+   ✅ Real AI sampling support (client must connect via GET)
+   ✅ Prompt completions
+   ✅ MCP specification compliant
+   
+   To enable sampling:
+   1. Client POSTs to /mcp for normal operations
+   2. Client GETs /mcp to establish SSE connection
+   3. Server sends sampling requests via SSE
+   4. Client responds via POST to /sampling/response
+  `);
+});

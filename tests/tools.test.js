@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { registerAgent, unregisterAgent, discoverAgents, sendMessage, checkForMessages, resetInstances } from '../src/tools.js';
+import { registerAgent, unregisterAgent, discoverAgents, sendMessage, checkForMessages, updateAgentStatus, resetInstances } from '../src/tools.js';
 import * as fs from 'fs/promises';
 
 describe('Tool Handlers', () => {
@@ -66,6 +66,32 @@ describe('Tool Handlers', () => {
       expect(result.content[0].text).toContain('First agent');
       expect(result.content[0].text).toContain('Second agent');
       expect(result._meta.agentCount).toBe(2);
+    });
+
+    it('should include agent status in discover output', async () => {
+      // Register two agents
+      const agent1 = await registerAgent('TestAgent1', 'Agent with custom status');
+      const agent2 = await registerAgent('TestAgent2', 'Agent with default status');
+      
+      // Update status for first agent
+      await updateAgentStatus(agent1.structuredContent.id, '🩰 Currently administering PIPs');
+      
+      // Discover agents
+      const result = await discoverAgents();
+      
+      // Check that status is included in the formatted text output
+      expect(result.content[0].text).toContain('Status: 🩰 Currently administering PIPs');
+      expect(result.content[0].text).toContain('Status: 👋 Just joined!'); // Default status
+      
+      // Also verify structured content includes status
+      const agents = result.structuredContent.agents;
+      expect(agents).toHaveLength(2);
+      
+      const foundAgent1 = agents.find(a => a.id === agent1.structuredContent.id);
+      expect(foundAgent1.status).toBe('🩰 Currently administering PIPs');
+      
+      const foundAgent2 = agents.find(a => a.id === agent2.structuredContent.id);
+      expect(foundAgent2.status).toBe('👋 Just joined!');
     });
   });
 

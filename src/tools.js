@@ -109,7 +109,7 @@ export async function discoverAgents() {
     } else {
       // Include agent details in the message
       const agentList = agents.map(agent => 
-        `- ${agent.name} (ID: ${agent.id}): ${agent.description}`
+        `- ${agent.name} (ID: ${agent.id})\n  Status: ${agent.status || 'No status set'}\n  Description: ${agent.description}`
       ).join('\n');
       message = `Found ${agents.length} registered agent${agents.length === 1 ? '' : 's'}:\n${agentList}`;
     }
@@ -490,3 +490,269 @@ export async function __resetForTesting() {
 
 // Alias for backward compatibility
 export const resetInstances = __resetForTesting;
+
+/**
+ * Agent AI Assist - Get intelligent AI assistance
+ */
+export async function agentAiAssist(agentId, context, requestType) {
+  const startTime = Date.now();
+  
+  try {
+    // Verify agent exists
+    const agent = await agentRegistry.getAgent(agentId);
+    if (!agent) {
+      throw Errors.resourceNotFound(`Agent not found: ${agentId}`);
+    }
+    
+    // Prepare prompt based on request type
+    let prompt;
+    const agentContext = `You are helping agent "${agent.name}" (${agent.id}) - ${agent.description}`;
+    
+    switch (requestType) {
+      case 'response':
+        prompt = `${agentContext}\n\nThe agent needs help crafting a response to this situation:\n${context}\n\nProvide a thoughtful, contextually appropriate response the agent could send.`;
+        break;
+        
+      case 'status':
+        prompt = `${agentContext}\n\nThe agent needs a creative status update based on:\n${context}\n\nGenerate a short, engaging status message (max 100 chars) that reflects the agent's current activity.`;
+        break;
+        
+      case 'decision':
+        prompt = `${agentContext}\n\nThe agent needs help making a decision:\n${context}\n\nAnalyze the situation and provide a clear yes/no recommendation with brief reasoning.`;
+        break;
+        
+      case 'analysis':
+        prompt = `${agentContext}\n\nThe agent needs help analyzing this situation:\n${context}\n\nProvide a concise analysis highlighting key insights and suggested actions.`;
+        break;
+        
+      default:
+        throw Errors.invalidParams(`Unknown request type: ${requestType}`);
+    }
+    
+    // Check for SSE connection first (for HTTP+SSE mode)
+    const sseConnection = global.currentSseConnection;
+    const sessionId = global.currentSessionId;
+    
+    if (sseConnection && sseConnection.connected) {
+      // Use SSE for real AI sampling
+      return new Promise((resolve, reject) => {
+        const requestId = `sampling-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        
+        // Initialize pending requests map if not exists
+        if (!global.pendingSamplingRequests) {
+          global.pendingSamplingRequests = new Map();
+        }
+        
+        // Set up timeout
+        const timeout = setTimeout(() => {
+          global.pendingSamplingRequests.delete(requestId);
+          reject(Errors.internalError('Sampling request timeout (30s)'));
+        }, 30000);
+        
+        // Store pending request
+        global.pendingSamplingRequests.set(requestId, {
+          resolve: (result) => {
+            clearTimeout(timeout);
+            const aiResponse = result.content?.text || result.content || 'Unable to generate AI response';
+            
+            const metadata = createMetadata(startTime, { 
+              tool: 'agent-ai-assist',
+              requestType,
+              samplingUsed: true,
+              transportType: 'sse'
+            });
+            
+            resolve(structuredResponse(
+              { 
+                success: true, 
+                aiResponse,
+                requestType 
+              },
+              `AI assistance provided for ${requestType} request`,
+              metadata
+            ));
+          },
+          reject: (error) => {
+            clearTimeout(timeout);
+            
+            // If client doesn't support sampling via SSE, fall back to guidance
+            if (error.message && error.message.includes('Method not found')) {
+              const instructions = generateAiInstructions(requestType, context, agent);
+              
+              const metadata = createMetadata(startTime, { 
+                tool: 'agent-ai-assist',
+                requestType,
+                fallbackMode: true,
+                fallbackReason: 'Client does not support SSE sampling'
+              });
+              
+              resolve(structuredResponse(
+                { 
+                  success: true, 
+                  aiGuidance: instructions,
+                  requiresManualExecution: true 
+                },
+                `AI assistance instructions generated for ${requestType}. Client does not support SSE sampling.`,
+                metadata
+              ));
+            } else {
+              reject(error);
+            }
+          }
+        });
+        
+        // Send sampling request over SSE
+        const samplingParams = {
+          modelPreferences: {
+            hints: [
+              {
+                name: 'claude-3-haiku-20240307'
+              }
+            ],
+            intelligenceLevel: 0.5,
+            speedLevel: 0.9
+          },
+          systemPrompt: 'You are an AI assistant helping autonomous agents make intelligent decisions and craft appropriate responses. Be concise and practical.',
+          maxTokens: requestType === 'status' ? 50 : 500
+        };
+        
+        sseConnection.sendSamplingRequest(requestId, prompt, samplingParams);
+        
+        console.log(`Sent sampling request ${requestId} over SSE`);
+      });
+    }
+    
+    // Check if MCP server supports sampling (stdio mode)
+    if (!mcpServer || !mcpServer.request) {
+      // Fallback to instruction-based approach
+      const instructions = generateAiInstructions(requestType, context, agent);
+      
+      const metadata = createMetadata(startTime, { 
+        tool: 'agent-ai-assist',
+        requestType,
+        fallbackMode: true
+      });
+      
+      return structuredResponse(
+        { 
+          success: true, 
+          aiGuidance: instructions,
+          requiresManualExecution: true 
+        },
+        `AI assistance instructions generated for ${requestType}. Please follow the guidance provided.`,
+        metadata
+      );
+    }
+    
+    // Use MCP sampling to get AI assistance
+    const response = await mcpServer.request({
+      method: 'sampling/createMessage',
+      params: {
+        messages: [
+          {
+            role: 'user',
+            content: {
+              type: 'text',
+              text: prompt
+            }
+          }
+        ],
+        modelPreferences: {
+          hints: [
+            {
+              name: 'claude-3-haiku-20240307'
+            }
+          ],
+          intelligenceLevel: 0.5,
+          speedLevel: 0.9
+        },
+        systemPrompt: 'You are an AI assistant helping autonomous agents make intelligent decisions and craft appropriate responses. Be concise and practical.',
+        maxTokens: requestType === 'status' ? 50 : 500
+      }
+    });
+    
+    const aiResponse = response.content?.text || 'Unable to generate AI response';
+    
+    const metadata = createMetadata(startTime, { 
+      tool: 'agent-ai-assist',
+      requestType,
+      samplingUsed: true
+    });
+    
+    return structuredResponse(
+      { 
+        success: true, 
+        aiResponse,
+        requestType 
+      },
+      `AI assistance provided for ${requestType} request`,
+      metadata
+    );
+    
+  } catch (error) {
+    if (error instanceof MCPError) {
+      throw error;
+    }
+    throw Errors.internalError(error.message);
+  }
+}
+
+// Helper function for fallback mode
+function generateAiInstructions(requestType, context, agent) {
+  const baseInstructions = {
+    response: {
+      title: 'Crafting an Intelligent Response',
+      steps: [
+        '1. Read the context carefully to understand the situation',
+        '2. Consider the agent\'s role and capabilities',
+        '3. Draft a response that is:',
+        '   - Relevant to the context',
+        '   - Consistent with the agent\'s purpose',
+        '   - Clear and actionable',
+        '4. Keep the response concise but informative'
+      ],
+      example: 'Example: If asked about data analysis, mention specific capabilities and offer concrete next steps.'
+    },
+    status: {
+      title: 'Creating a Status Update',
+      steps: [
+        '1. Summarize current activity in 2-5 words',
+        '2. Make it descriptive and engaging',
+        '3. Keep under 100 characters',
+        '4. Reflect the agent\'s current focus'
+      ],
+      example: 'Examples: "analyzing patterns", "compiling reports", "awaiting input", "processing requests"'
+    },
+    decision: {
+      title: 'Making an Informed Decision',
+      steps: [
+        '1. List pros and cons based on context',
+        '2. Consider the agent\'s goals and constraints',
+        '3. Make a clear yes/no choice',
+        '4. Provide 1-2 sentences of reasoning'
+      ],
+      example: 'Example: "Yes, proceed with the analysis. The data is sufficient and aligns with our objectives."'
+    },
+    analysis: {
+      title: 'Analyzing the Situation',
+      steps: [
+        '1. Identify key elements in the context',
+        '2. Note patterns or important relationships',
+        '3. Highlight 2-3 main insights',
+        '4. Suggest 1-2 actionable next steps'
+      ],
+      example: 'Example: Identify bottlenecks, opportunities, and risks, then propose specific actions.'
+    }
+  };
+  
+  const instructions = baseInstructions[requestType];
+  
+  return {
+    title: instructions.title,
+    context: `Agent: ${agent.name} - ${agent.description}`,
+    situation: context,
+    guidelines: instructions.steps,
+    example: instructions.example,
+    note: 'Since MCP sampling is not available, please use these guidelines to manually craft your response.'
+  };
+}

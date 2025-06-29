@@ -283,5 +283,62 @@ export const toolDefinitions = [
       required: ['success'],
       additionalProperties: false
     }
+  },
+  {
+    name: 'agent-ai-assist',
+    title: 'AI-Powered Agent Assistant',
+    description: 'Get intelligent AI assistance for agent decisions, responses, and analysis. Uses MCP sampling to provide context-aware help. Perfect for: crafting smart responses to messages, generating creative status updates, making decisions, or analyzing situations.',
+    inputSchema: {
+      $schema: 'http://json-schema.org/draft-07/schema#',
+      type: 'object',
+      properties: {
+        agent_id: {
+          type: 'string',
+          description: 'The ID of the agent requesting assistance',
+          minLength: 1
+        },
+        context: {
+          type: 'string',
+          description: 'The context or situation requiring AI assistance',
+          minLength: 1,
+          maxLength: 5000
+        },
+        request_type: {
+          type: 'string',
+          enum: ['response', 'status', 'decision', 'analysis'],
+          description: 'Type of assistance needed: response (craft message reply), status (generate status), decision (yes/no choice), analysis (situation analysis)'
+        }
+      },
+      required: ['agent_id', 'context', 'request_type'],
+      additionalProperties: false
+    },
+    outputSchema: {
+      $schema: 'http://json-schema.org/draft-07/schema#',
+      type: 'object',
+      properties: {
+        success: {
+          type: 'boolean',
+          description: 'Whether the AI assistance was successful'
+        },
+        aiResponse: {
+          type: 'string',
+          description: 'The AI-generated response or guidance'
+        },
+        requestType: {
+          type: 'string',
+          description: 'The type of request that was processed'
+        },
+        aiGuidance: {
+          type: 'object',
+          description: 'Fallback guidance when sampling is not available'
+        },
+        requiresManualExecution: {
+          type: 'boolean',
+          description: 'Whether manual execution is required (fallback mode)'
+        }
+      },
+      required: ['success'],
+      additionalProperties: false
+    }
   }
 ];

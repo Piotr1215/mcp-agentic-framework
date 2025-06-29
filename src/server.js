@@ -6,6 +6,7 @@ import {
   ReadResourceRequestSchema,
   ListPromptsRequestSchema,
   GetPromptRequestSchema,
+  CompleteRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 import { toolDefinitions } from './toolDefinitions.js';
 import { resourceDefinitions, getResourceContent } from './resourceDefinitions.js';
@@ -44,9 +45,9 @@ export function createServer() {
           listChanged: false
         },
         sampling: {},
+        completions: {},
         // Future capabilities can be added:
         // logging: {},
-        // completions: {},
         // ping: {}
       },
     }
@@ -130,6 +131,15 @@ export function createServer() {
     }
   });
 
+  // Handle completions for prompts
+  server.setRequestHandler(CompleteRequestSchema, async (request) => {
+    const { ref, argument } = request.params;
+    
+    // Import and use shared completion handler
+    const { handleCompletion } = await import('./completionHandler.js');
+    return await handleCompletion(ref, argument);
+  });
+
   // Handle tool calls
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const { name, arguments: args } = request.params;
@@ -168,6 +178,12 @@ export function createServer() {
         case 'send-broadcast': {
           const { from, message, priority } = args;
           return await sendBroadcast(from, message, priority);
+        }
+
+        case 'agent-ai-assist': {
+          const { agent_id, context, request_type } = args;
+          const { agentAiAssist } = await import('./tools.js');
+          return await agentAiAssist(agent_id, context, request_type);
         }
 
         default:
