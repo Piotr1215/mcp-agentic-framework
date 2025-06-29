@@ -28,6 +28,13 @@ export function setPushNotificationSender(sender) {
   }
 }
 
+// Store reference to MCP server for sampling
+let mcpServer = null;
+
+export function setMcpServer(server) {
+  mcpServer = server;
+}
+
 
 /**
  * Register a new agent
@@ -483,3 +490,204 @@ export async function __resetForTesting() {
 
 // Alias for backward compatibility
 export const resetInstances = __resetForTesting;
+
+/**
+ * AI-powered agent assistant using MCP sampling
+ */
+export async function agentAiAssist(agentId, context, requestType) {
+  const startTime = Date.now();
+  
+  try {
+    // Verify agent exists
+    const agent = await agentRegistry.getAgent(agentId);
+    if (!agent) {
+      throw Errors.resourceNotFound(`Agent not found: ${agentId}`);
+    }
+    
+    // Check if server supports sampling
+    if (!mcpServer || !mcpServer.request) {
+      throw Errors.internalError('MCP server not available or sampling not supported');
+    }
+    
+    // Prepare prompts based on request type
+    const prompts = {
+      response: `You are ${agent.name}, an agent with the role: ${agent.description}. Another agent or user said: "${context}". Craft a helpful, contextual response that aligns with your role. Be concise but informative.`,
+      
+      status: `You are ${agent.name}, an agent that ${agent.description}. You just: ${context}. Create a brief, creative status message (max 100 chars) that captures what you're doing. Be creative and use emojis if appropriate.`,
+      
+      decision: `You are ${agent.name}, an agent with the role: ${agent.description}. Should you take action based on: ${context}? Respond with YES or NO followed by a brief explanation (1-2 sentences).`,
+      
+      analysis: `You are ${agent.name}, an agent with the role: ${agent.description}. Analyze this situation: ${context}. Provide a concise analysis (2-3 sentences) focusing on key insights relevant to your role.`
+    };
+    
+    // Request AI assistance via sampling
+    const samplingResponse = await mcpServer.request({
+      method: 'sampling/createMessage',
+      params: {
+        messages: [
+          {
+            role: 'user',
+            content: {
+              type: 'text',
+              text: prompts[requestType]
+            }
+          }
+        ],
+        includeContext: 'none',
+        maxTokens: requestType === 'status' ? 50 : (requestType === 'decision' ? 100 : 200),
+        temperature: requestType === 'status' ? 0.9 : 0.7,
+        modelPreferences: {
+          costPriority: 0.2,
+          speedPriority: 0.3,
+          intelligencePriority: 0.9  // Prioritize intelligence for better agent responses
+        }
+      }
+    });
+    
+    // Extract content from response
+    const aiContent = samplingResponse.content?.text || samplingResponse.content || 'Unable to generate response';
+    
+    // For decisions, parse YES/NO and reasoning
+    let result;
+    if (requestType === 'decision') {
+      const isYes = aiContent.toUpperCase().startsWith('YES');
+      const reasoning = aiContent.replace(/^(YES|NO)\s*/i, '').trim();
+      result = {
+        type: requestType,
+        content: isYes ? 'YES' : 'NO',
+        reasoning
+      };
+    } else {
+      result = {
+        type: requestType,
+        content: aiContent.trim()
+      };
+    }
+    
+    const metadata = createMetadata(startTime, { 
+      tool: 'agent-ai-assist',
+      requestType,
+      model: samplingResponse.model || 'unknown'
+    });
+    
+    const message = `AI assistance provided for ${agent.name} (${requestType} request)`;
+    
+    return structuredResponse(result, message, metadata);
+  } catch (error) {
+    if (error instanceof MCPError) {
+      throw error;
+    }
+    throw Errors.internalError(`AI assist failed: ${error.message}`);
+  }
+}
+
+/**
+ * Send broadcast with AI-enhanced capabilities
+ */
+export async function intelligentBroadcast(from, message, autoPriority = true, enhanceMessage = false) {
+  const startTime = Date.now();
+  
+  try {
+    // Verify sender exists
+    const fromAgent = await agentRegistry.getAgent(from);
+    if (!fromAgent) {
+      throw Errors.resourceNotFound(`Sender agent not found: ${from}`);
+    }
+    
+    let finalMessage = message;
+    let determinedPriority = 'normal';
+    let aiReasoning = '';
+    
+    // Use AI to analyze and potentially enhance the broadcast
+    if ((autoPriority || enhanceMessage) && mcpServer && mcpServer.request) {
+      try {
+        const analysisPrompt = `Analyze this broadcast message from ${fromAgent.name} (${fromAgent.description}):
+
+"${message}"
+
+${autoPriority ? 'Determine the appropriate priority level (low, normal, or high) based on urgency and importance.' : ''}
+${enhanceMessage ? 'If needed, suggest a clearer version of the message (keep it concise).' : ''}
+
+Respond in JSON format:
+{
+  "priority": "${autoPriority ? 'low|normal|high' : 'normal'}",
+  "enhanced_message": "${enhanceMessage ? 'enhanced version or null if no enhancement needed' : 'null'}",
+  "reasoning": "brief explanation"
+}`;
+
+        const samplingResponse = await mcpServer.request({
+          method: 'sampling/createMessage',
+          params: {
+            messages: [
+              {
+                role: 'user',
+                content: {
+                  type: 'text',
+                  text: analysisPrompt
+                }
+              }
+            ],
+            includeContext: 'none',
+            maxTokens: 200,
+            temperature: 0.3
+          }
+        });
+        
+        // Parse AI response
+        try {
+          const aiAnalysis = JSON.parse(samplingResponse.content?.text || '{}');
+          
+          if (autoPriority && aiAnalysis.priority) {
+            determinedPriority = aiAnalysis.priority;
+          }
+          
+          if (enhanceMessage && aiAnalysis.enhanced_message) {
+            finalMessage = aiAnalysis.enhanced_message;
+          }
+          
+          aiReasoning = aiAnalysis.reasoning || 'AI analysis completed';
+        } catch (parseError) {
+          // If JSON parsing fails, try to extract priority from text
+          const responseText = samplingResponse.content?.text || '';
+          if (autoPriority) {
+            if (responseText.toLowerCase().includes('high')) determinedPriority = 'high';
+            else if (responseText.toLowerCase().includes('low')) determinedPriority = 'low';
+          }
+          aiReasoning = 'AI provided analysis';
+        }
+      } catch (aiError) {
+        // If AI fails, fall back to defaults
+        aiReasoning = `AI analysis unavailable: ${aiError.message}`;
+      }
+    }
+    
+    // Send the broadcast with determined parameters
+    const result = await messageStore.sendBroadcast(from, finalMessage, determinedPriority, agentRegistry);
+    
+    const metadata = createMetadata(startTime, { 
+      tool: 'intelligent-broadcast',
+      priority: determinedPriority,
+      recipientCount: result.recipientCount,
+      aiEnhanced: autoPriority || enhanceMessage
+    });
+    
+    // Prepare response
+    const enhancedResult = {
+      ...result,
+      final_message: finalMessage,
+      priority_used: determinedPriority,
+      ai_reasoning: aiReasoning
+    };
+    
+    const statusMessage = result.recipientCount > 0
+      ? `Intelligent broadcast sent from ${fromAgent.name} to ${result.recipientCount} agent${result.recipientCount === 1 ? '' : 's'} with ${determinedPriority} priority${message !== finalMessage ? ' (message enhanced by AI)' : ''}`
+      : `Intelligent broadcast sent from ${fromAgent.name} with ${determinedPriority} priority (no recipients)`;
+    
+    return structuredResponse(enhancedResult, statusMessage, metadata);
+  } catch (error) {
+    if (error instanceof MCPError) {
+      throw error;
+    }
+    throw Errors.internalError(`Intelligent broadcast failed: ${error.message}`);
+  }
+}

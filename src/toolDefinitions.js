@@ -287,5 +287,112 @@ export const toolDefinitions = [
       required: ['success'],
       additionalProperties: false
     }
+  },
+  {
+    name: 'agent-ai-assist',
+    title: 'AI-Powered Agent Assistant',
+    description: 'Get intelligent AI assistance for agent decisions, responses, and analysis. Uses MCP sampling to provide context-aware help. Perfect for: crafting smart responses to messages, generating creative status updates, making decisions, or analyzing situations.',
+    inputSchema: {
+      $schema: 'http://json-schema.org/draft-07/schema#',
+      type: 'object',
+      properties: {
+        agent_id: {
+          type: 'string',
+          description: 'The ID of the agent requesting assistance',
+          minLength: 1
+        },
+        context: {
+          type: 'string',
+          description: 'The context or situation requiring AI assistance',
+          minLength: 1,
+          maxLength: 5000
+        },
+        request_type: {
+          type: 'string',
+          enum: ['response', 'status', 'decision', 'analysis'],
+          description: 'Type of assistance needed: response (craft message reply), status (generate status), decision (yes/no choice), analysis (situation analysis)'
+        }
+      },
+      required: ['agent_id', 'context', 'request_type'],
+      additionalProperties: false
+    },
+    outputSchema: {
+      $schema: 'http://json-schema.org/draft-07/schema#',
+      type: 'object',
+      properties: {
+        type: {
+          type: 'string',
+          description: 'The type of response generated'
+        },
+        content: {
+          type: 'string',
+          description: 'The AI-generated content'
+        },
+        reasoning: {
+          type: 'string',
+          description: 'Explanation of the AI\'s reasoning (for decisions)'
+        }
+      },
+      required: ['type', 'content'],
+      additionalProperties: false
+    }
+  },
+  {
+    name: 'intelligent-broadcast',
+    title: 'AI-Enhanced Broadcast',
+    description: 'Send a broadcast with AI-enhanced formatting and priority detection. The AI analyzes your message content to suggest appropriate priority levels and can enhance the message for clarity.',
+    inputSchema: {
+      $schema: 'http://json-schema.org/draft-07/schema#',
+      type: 'object',
+      properties: {
+        from: {
+          type: 'string',
+          description: 'The sender agent\'s ID',
+          minLength: 1
+        },
+        message: {
+          type: 'string',
+          description: 'The message to broadcast (AI may enhance it)',
+          minLength: 1,
+          maxLength: 5000
+        },
+        auto_priority: {
+          type: 'boolean',
+          description: 'Let AI determine the priority based on content',
+          default: true
+        },
+        enhance_message: {
+          type: 'boolean',
+          description: 'Allow AI to enhance message clarity',
+          default: false
+        }
+      },
+      required: ['from', 'message'],
+      additionalProperties: false
+    },
+    outputSchema: {
+      $schema: 'http://json-schema.org/draft-07/schema#',
+      type: 'object',
+      properties: {
+        success: {
+          type: 'boolean',
+          description: 'Whether the broadcast was sent successfully'
+        },
+        final_message: {
+          type: 'string',
+          description: 'The actual message that was broadcast'
+        },
+        priority_used: {
+          type: 'string',
+          description: 'The priority level that was applied'
+        },
+        ai_reasoning: {
+          type: 'string',
+          description: 'AI\'s reasoning for priority/enhancements'
+        }
+      },
+      required: ['success'],
+      additionalProperties: false
+    }
   }
 ];

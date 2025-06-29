@@ -18,7 +18,10 @@ import {
   checkForMessages,
   updateAgentStatus,
   sendBroadcast,
-  setPushNotificationSender
+  setPushNotificationSender,
+  setMcpServer,
+  agentAiAssist,
+  intelligentBroadcast
 } from './tools.js';
 import { Errors, MCPError } from './errors.js';
 
@@ -42,10 +45,11 @@ export function createServer() {
           // We support prompts
           listChanged: false
         },
+        sampling: {},
         // Future capabilities can be added:
-        // sampling: {},
         // logging: {},
-        // completions: {}
+        // completions: {},
+        // ping: {}
       },
     }
   );
@@ -63,6 +67,9 @@ export function createServer() {
       return false;
     }
   });
+  
+  // Set up MCP server reference for sampling
+  setMcpServer(server);
 
   // Define available tools
   server.setRequestHandler(ListToolsRequestSchema, async () => ({
@@ -165,7 +172,15 @@ export function createServer() {
           return await sendBroadcast(from, message, priority);
         }
 
+        case 'agent-ai-assist': {
+          const { agent_id, context, request_type } = args;
+          return await agentAiAssist(agent_id, context, request_type);
+        }
 
+        case 'intelligent-broadcast': {
+          const { from, message, auto_priority, enhance_message } = args;
+          return await intelligentBroadcast(from, message, auto_priority, enhance_message);
+        }
 
         default:
           throw Errors.toolNotFound(name);
