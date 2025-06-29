@@ -24,18 +24,24 @@ describe('Notification Tools', () => {
       expect(result.content).toHaveLength(1);
       expect(result.structuredContent).toMatchObject({
         success: true,
-        previousStatus: 'online',
+        previousStatus: expect.any(String),
         newStatus: 'busy'
       });
-      expect(result.content[0].text).toContain("Agent status updated from 'online' to 'busy'");
+      expect(result.content[0].text).toMatch(/Agent status updated from .* to 'busy'/);
     });
 
     it('should handle invalid status', async () => {
       const registerResult = await registerAgent('TestAgent', 'A test agent');
       const agentId = registerResult.structuredContent.id;
 
-      await expect(updateAgentStatus(agentId, 'invalid-status'))
-        .rejects.toThrow('Invalid status');
+      // Empty status should fail
+      await expect(updateAgentStatus(agentId, ''))
+        .rejects.toThrow('Status is required');
+        
+      // Status too long should fail
+      const longStatus = 'x'.repeat(101);
+      await expect(updateAgentStatus(agentId, longStatus))
+        .rejects.toThrow('Status must be 100 characters or less');
     });
 
     it('should handle non-existent agent', async () => {

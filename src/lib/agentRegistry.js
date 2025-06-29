@@ -11,7 +11,7 @@ const generateId = () => {
   return `agent-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 };
 
-const createAgent = (id, name, description, status = 'online') => ({
+const createAgent = (id, name, description, status = '👋 Just joined!') => ({
   id,
   name,
   description,
@@ -163,8 +163,12 @@ export const createAgentRegistry = (storagePath, notificationManager = null) => 
   const updateAgentStatus = async (id, status) => {
     validateAgentId(id);
     
-    if (!['online', 'offline', 'busy', 'away'].includes(status)) {
-      throw new Error('Invalid status. Must be: online, offline, busy, or away');
+    // Allow any string status up to 100 characters
+    if (!status || typeof status !== 'string' || status.trim().length === 0) {
+      throw new Error('Status is required');
+    }
+    if (status.length > 100) {
+      throw new Error('Status must be 100 characters or less');
     }
 
     return withLock(async () => {

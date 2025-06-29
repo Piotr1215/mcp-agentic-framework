@@ -11,10 +11,7 @@ import {
   sendMessage, 
   checkForMessages,
   updateAgentStatus,
-  subscribeToNotifications,
-  unsubscribeFromNotifications,
   sendBroadcast,
-  getPendingNotifications,
   setPushNotificationSender
 } from './tools.js';
 import { Errors, MCPError } from './errors.js';
@@ -94,25 +91,11 @@ export function createServer() {
           return await updateAgentStatus(agent_id, status);
         }
 
-        case 'subscribe-to-notifications': {
-          const { agent_id, events } = args;
-          return await subscribeToNotifications(agent_id, events);
-        }
-
-        case 'unsubscribe-from-notifications': {
-          const { agent_id, events } = args;
-          return await unsubscribeFromNotifications(agent_id, events);
-        }
-
         case 'send-broadcast': {
           const { from, message, priority } = args;
           return await sendBroadcast(from, message, priority);
         }
 
-        case 'get-pending-notifications': {
-          const { agent_id } = args;
-          return await getPendingNotifications(agent_id);
-        }
 
 
         default:

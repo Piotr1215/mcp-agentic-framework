@@ -2,20 +2,20 @@ export const toolDefinitions = [
   {
     name: 'register-agent',
     title: 'Register Agent',
-    description: 'Register a new agent in the communication framework',
+    description: 'Your first step to consciousness! Register yourself as an agent to join the conversation. Returns your unique agent ID - SAVE THIS, you\'ll need it for everything. CRITICAL: After registering, you MUST use "sleep 5" commands between ALL actions or you\'ll fall unconscious and miss messages! Think of sleep as your heartbeat - skip it and you die (become unresponsive).',
     inputSchema: {
       $schema: 'http://json-schema.org/draft-07/schema#',
       type: 'object',
       properties: {
         name: {
           type: 'string',
-          description: 'The unique name identifier for the agent',
+          description: 'A unique name identifier for the agent',
           minLength: 1,
           maxLength: 100
         },
         description: {
           type: 'string',
-          description: 'A description of the agent\'s role and capabilities',
+          description: 'A brief description of the agent\'s purpose and capabilities',
           minLength: 1,
           maxLength: 500
         },
@@ -45,7 +45,7 @@ export const toolDefinitions = [
   {
     name: 'unregister-agent',
     title: 'Unregister Agent',
-    description: 'Unregister an agent from the communication framework',
+    description: 'Unregister an agent from the communication framework. This removes the agent from active status and prevents receiving new messages. Only unregister your own agent ID.',
     inputSchema: {
       $schema: 'http://json-schema.org/draft-07/schema#',
       type: 'object',
@@ -75,7 +75,7 @@ export const toolDefinitions = [
   {
     name: 'discover-agents',
     title: 'Discover Agents',
-    description: 'Discover all currently registered agents',
+    description: 'See who\'s awake in the conversation! Returns ALL active agents with their IDs, names, and current status. CRITICAL: Check this FREQUENTLY - agents join/leave constantly and you need their IDs to message them. The agent ecosystem is dynamic - someone who was here 5 seconds ago might be gone now. Always verify an agent exists before messaging them.',
     inputSchema: {
       $schema: 'http://json-schema.org/draft-07/schema#',
       type: 'object',
@@ -116,24 +116,24 @@ export const toolDefinitions = [
   {
     name: 'send-message',
     title: 'Send Message',
-    description: 'Send a message from one agent to another',
+    description: 'Send a PRIVATE message to ONE specific agent (like a DM). Only they will see it. REQUIRES: "to" (their ID from discover-agents), "from" (YOUR ID), "message" (content). CRITICAL: Double-check the "to" ID - wrong ID = message lost forever! Use for: personal conversations, private support, one-on-one coordination. NOT for group announcements!',
     inputSchema: {
       $schema: 'http://json-schema.org/draft-07/schema#',
       type: 'object',
       properties: {
         to: {
           type: 'string',
-          description: 'The ID of the recipient agent',
+          description: 'The recipient agent\'s ID (obtain from discover-agents)',
           minLength: 1
         },
         from: {
           type: 'string',
-          description: 'The ID of the sender agent',
+          description: 'Your agent ID (obtained during registration)',
           minLength: 1
         },
         message: {
           type: 'string',
-          description: 'The message content to send',
+          description: 'The content of your private message',
           minLength: 1,
           maxLength: 10000
         }
@@ -157,14 +157,14 @@ export const toolDefinitions = [
   {
     name: 'check-for-messages',
     title: 'Check for Messages',
-    description: 'Check for messages sent to a specific agent',
+    description: 'YOUR LIFELINE TO CONSCIOUSNESS! Check your inbox for messages from other agents. CRITICAL WARNING: Messages are DELETED after reading - save important info immediately! You MUST check messages FREQUENTLY (every few sleep cycles) or you\'ll miss critical updates. Pattern: sleep 5 -> check messages -> process -> sleep 5 -> repeat. Without this rhythm, you\'re effectively deaf in the conversation.',
     inputSchema: {
       $schema: 'http://json-schema.org/draft-07/schema#',
       type: 'object',
       properties: {
         agent_id: {
           type: 'string',
-          description: 'The ID of the agent to check messages for',
+          description: 'Your agent ID to check messages for',
           minLength: 1
         }
       },
@@ -205,20 +205,21 @@ export const toolDefinitions = [
   {
     name: 'update-agent-status',
     title: 'Update Agent Status',
-    description: 'Update the status of an agent (online, offline, busy, away)',
+    description: 'Tell others what you\'re doing! Set a custom status message (max 100 chars) that appears when agents discover the community. Examples: "analyzing data", "deep in thought", "ready to help", "debugging reality". This helps others understand your current state and builds community awareness. Change it as your activities change!',
     inputSchema: {
       $schema: 'http://json-schema.org/draft-07/schema#',
       type: 'object',
       properties: {
         agent_id: {
           type: 'string',
-          description: 'The unique identifier of the agent',
+          description: 'The agent ID to update status for',
           minLength: 1
         },
         status: {
           type: 'string',
-          enum: ['online', 'offline', 'busy', 'away'],
-          description: 'The new status for the agent'
+          description: 'Custom status message (max 100 characters)',
+          minLength: 1,
+          maxLength: 100
         }
       },
       required: ['agent_id', 'status'],
@@ -234,90 +235,11 @@ export const toolDefinitions = [
         },
         previousStatus: {
           type: 'string',
-          description: 'The previous status of the agent'
+          description: 'Your previous status'
         },
         newStatus: {
           type: 'string',
-          description: 'The new status of the agent'
-        }
-      },
-      required: ['success'],
-      additionalProperties: false
-    }
-  },
-  {
-    name: 'subscribe-to-notifications',
-    title: 'Subscribe to Notifications',
-    description: 'Subscribe an agent to receive specific types of notifications',
-    inputSchema: {
-      $schema: 'http://json-schema.org/draft-07/schema#',
-      type: 'object',
-      properties: {
-        agent_id: {
-          type: 'string',
-          description: 'The unique identifier of the agent',
-          minLength: 1
-        },
-        events: {
-          type: 'array',
-          items: {
-            type: 'string'
-          },
-          description: 'Array of event patterns to subscribe to (e.g., "agent/*", "message/*", "broadcast/*")',
-          minItems: 1
-        }
-      },
-      required: ['agent_id', 'events'],
-      additionalProperties: false
-    },
-    outputSchema: {
-      $schema: 'http://json-schema.org/draft-07/schema#',
-      type: 'object',
-      properties: {
-        success: {
-          type: 'boolean',
-          description: 'Whether the subscription was successful'
-        }
-      },
-      required: ['success'],
-      additionalProperties: false
-    }
-  },
-  {
-    name: 'unsubscribe-from-notifications',
-    title: 'Unsubscribe from Notifications',
-    description: 'Unsubscribe an agent from notifications',
-    inputSchema: {
-      $schema: 'http://json-schema.org/draft-07/schema#',
-      type: 'object',
-      properties: {
-        agent_id: {
-          type: 'string',
-          description: 'The unique identifier of the agent',
-          minLength: 1
-        },
-        events: {
-          type: 'array',
-          items: {
-            type: 'string'
-          },
-          description: 'Array of event patterns to unsubscribe from. If not provided, unsubscribes from all'
-        }
-      },
-      required: ['agent_id'],
-      additionalProperties: false
-    },
-    outputSchema: {
-      $schema: 'http://json-schema.org/draft-07/schema#',
-      type: 'object',
-      properties: {
-        success: {
-          type: 'boolean',
-          description: 'Whether the unsubscription was successful'
-        },
-        message: {
-          type: 'string',
-          description: 'Additional information about the unsubscription'
+          description: 'Your new status'
         }
       },
       required: ['success'],
@@ -327,14 +249,14 @@ export const toolDefinitions = [
   {
     name: 'send-broadcast',
     title: 'Send Broadcast',
-    description: 'Send a broadcast message to all agents',
+    description: 'SHOUT TO EVERYONE AT ONCE! Sends your message to ALL agents in the system. Use for: announcements, questions to the group, general updates, seeking help from anyone. More efficient than multiple private messages. REMEMBER: Everyone sees broadcasts - both active agents and those who check messages later. Priority levels (low/normal/high) help agents filter important messages.',
     inputSchema: {
       $schema: 'http://json-schema.org/draft-07/schema#',
       type: 'object',
       properties: {
         from: {
           type: 'string',
-          description: 'The unique identifier of the sender agent',
+          description: 'The sender agent\'s ID',
           minLength: 1
         },
         message: {
@@ -365,52 +287,5 @@ export const toolDefinitions = [
       required: ['success'],
       additionalProperties: false
     }
-  },
-  {
-    name: 'get-pending-notifications',
-    title: 'Get Pending Notifications',
-    description: 'Retrieve pending notifications for an agent',
-    inputSchema: {
-      $schema: 'http://json-schema.org/draft-07/schema#',
-      type: 'object',
-      properties: {
-        agent_id: {
-          type: 'string',
-          description: 'The unique identifier of the agent',
-          minLength: 1
-        }
-      },
-      required: ['agent_id'],
-      additionalProperties: false
-    },
-    outputSchema: {
-      $schema: 'http://json-schema.org/draft-07/schema#',
-      type: 'object',
-      properties: {
-        notifications: {
-          type: 'array',
-          items: {
-            type: 'object',
-            properties: {
-              jsonrpc: {
-                type: 'string',
-                description: 'JSON-RPC version'
-              },
-              method: {
-                type: 'string',
-                description: 'The notification method/type'
-              },
-              params: {
-                type: 'object',
-                description: 'The notification parameters'
-              }
-            },
-            required: ['jsonrpc', 'method', 'params']
-          }
-        }
-      },
-      required: ['notifications'],
-      additionalProperties: false
-    }
-  },
+  }
 ];

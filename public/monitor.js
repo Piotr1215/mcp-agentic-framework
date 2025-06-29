@@ -282,7 +282,6 @@ function renderAgentList() {
     `;
     
     agentListHtml += state.agents.map(agent => {
-        const hasSpeakingStick = false;
         return `
             <div class="agent-item ${agent.id === state.selectedAgentId ? 'active' : ''}" 
                  data-agent-id="${agent.id}">
@@ -290,7 +289,6 @@ function renderAgentList() {
                 <div class="agent-info">
                     <div class="agent-name">
                         ${escapeHtml(agent.name)}
-                        ${hasSpeakingStick ? '<span style="margin-left: 5px;">🎤</span>' : ''}
                     </div>
                     <div class="agent-status">
                         <span class="status-dot ${agent.status}"></span>
@@ -488,16 +486,6 @@ function renderChatView() {
 // Removed speaking stick functionality
 async function fetchSpeakingStickStatus() {
     // No longer needed - function kept for compatibility
-                holder: null,
-                queue: data.speakingStick.queue
-            });
-            
-            // Update UI display - speaking stick removed
-            return true;
-        }
-    } catch (error) {
-        // Silent fail
-    }
     return false;
 }
 

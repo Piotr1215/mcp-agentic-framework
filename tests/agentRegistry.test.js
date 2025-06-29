@@ -50,7 +50,7 @@ describe('Agent Registry', () => {
         id: result.id,
         name: 'TestAgent',
         description: 'A test agent',
-        status: 'online',
+        status: expect.any(String),
         registeredAt: expect.any(String),
         lastActivityAt: expect.any(String)
       });
@@ -128,13 +128,13 @@ describe('Agent Registry', () => {
         id: agent1.id,
         name: 'Agent1',
         description: 'First agent',
-        status: 'online'
+        status: expect.any(String)
       }));
       expect(agents).toContainEqual(expect.objectContaining({
         id: agent2.id,
         name: 'Agent2',
         description: 'Second agent',
-        status: 'online'
+        status: expect.any(String)
       }));
     });
 
@@ -166,7 +166,7 @@ describe('Agent Registry', () => {
         id,
         name: 'TestAgent',
         description: 'A test agent',
-        status: 'online',
+        status: expect.any(String),
         registeredAt: expect.any(String),
         lastActivityAt: expect.any(String)
       });
@@ -209,9 +209,9 @@ describe('Agent Registry', () => {
       
       const result = await registry.updateAgentStatus(id, 'busy');
       
-      expect(result).toEqual({
+      expect(result).toMatchObject({
         success: true,
-        previousStatus: 'online',
+        previousStatus: expect.any(String),
         newStatus: 'busy'
       });
       
@@ -223,8 +223,14 @@ describe('Agent Registry', () => {
     it('should validate status values', async () => {
       const { id } = await registry.registerAgent('TestAgent', 'A test agent');
       
-      await expect(registry.updateAgentStatus(id, 'invalid-status'))
-        .rejects.toThrow('Invalid status');
+      // Empty status should fail
+      await expect(registry.updateAgentStatus(id, ''))
+        .rejects.toThrow('Status is required');
+      
+      // Status too long should fail  
+      const longStatus = 'x'.repeat(101);
+      await expect(registry.updateAgentStatus(id, longStatus))
+        .rejects.toThrow('Status must be 100 characters or less');
     });
 
     it('should return error for non-existent agent', async () => {
@@ -242,18 +248,26 @@ describe('Agent Registry', () => {
       
       await registry.updateAgentStatus(id, 'offline');
       
-      expect(notifySpy).toHaveBeenCalledWith(id, 'offline', {
-        previousStatus: 'online',
-        agentName: 'TestAgent'
-      });
+      expect(notifySpy).toHaveBeenCalledWith(
+        id, 
+        'offline', 
+        expect.objectContaining({
+          previousStatus: expect.any(String),
+          agentName: 'TestAgent'
+        })
+      );
     });
 
     it('should not emit notification if status unchanged', async () => {
       const notifySpy = vi.spyOn(notificationManager, 'notifyAgentStatusChange');
       const { id } = await registry.registerAgent('TestAgent', 'A test agent');
       
-      // Status is already 'online' by default
-      await registry.updateAgentStatus(id, 'online');
+      // Get current status
+      const agent = await registry.getAgent(id);
+      const currentStatus = agent.status;
+      
+      // Update to same status
+      await registry.updateAgentStatus(id, currentStatus);
       
       expect(notifySpy).not.toHaveBeenCalled();
     });
@@ -291,16 +305,13 @@ describe('Agent Registry', () => {
       // Update statuses
       await registry.updateAgentStatus(agent1.id, 'busy');
       await registry.updateAgentStatus(agent2.id, 'offline');
+      await registry.updateAgentStatus(agent3.id, 'busy');
       
-      const onlineAgents = await registry.getAgentsByStatus('online');
       const busyAgents = await registry.getAgentsByStatus('busy');
       const offlineAgents = await registry.getAgentsByStatus('offline');
       
-      expect(onlineAgents).toHaveLength(1);
-      expect(onlineAgents[0].name).toBe('Agent3');
-      
-      expect(busyAgents).toHaveLength(1);
-      expect(busyAgents[0].name).toBe('Agent1');
+      expect(busyAgents).toHaveLength(2);
+      expect(busyAgents.map(a => a.name).sort()).toEqual(['Agent1', 'Agent3']);
       
       expect(offlineAgents).toHaveLength(1);
       expect(offlineAgents[0].name).toBe('Agent2');

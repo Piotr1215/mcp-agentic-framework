@@ -9,10 +9,7 @@ import {
   sendMessage, 
   checkForMessages,
   updateAgentStatus,
-  subscribeToNotifications,
-  unsubscribeFromNotifications,
-  sendBroadcast,
-  getPendingNotifications
+  sendBroadcast
 } from './tools.js';
 import { Errors, MCPError } from './errors.js';
 

@@ -13,25 +13,55 @@
         <header class="app-header">
             <h1>MCP Agent Monitor</h1>
             <div class="header-controls">
-                <label class="toggle-switch">
-                    <input type="checkbox" id="autoScrollToggle">
-                    <span>Auto-scroll</span>
-                </label>
-                <label class="toggle-switch">
-                    <input type="checkbox" id="showOnlyNewToggle">
-                    <span>Show only new</span>
-                </label>
-                <button id="markAllReadButton" class="text-button">Mark all read</button>
-                <label class="toggle-switch">
-                    <input type="checkbox" id="reverseOrderToggle">
-                    <span>Newest first</span>
-                </label>
-                <label class="toggle-switch">
-                    <input type="checkbox" id="hideBroadcastsToggle">
-                    <span>Hide broadcasts</span>
-                </label>
-                <button id="cleanupButton" class="text-button danger">🗑️ Clean old</button>
-                <button id="showPanelButton" class="text-button" style="display: none;" title="Show Stats">📊</button>
+                <div class="control-group">
+                    <label class="control-item toggle-compact">
+                        <input type="checkbox" id="autoScrollToggle">
+                        <span class="toggle-label">Auto-scroll</span>
+                    </label>
+                    <label class="control-item toggle-compact">
+                        <input type="checkbox" id="reverseOrderToggle">
+                        <span class="toggle-label">Newest first</span>
+                    </label>
+                </div>
+                
+                <div class="control-divider"></div>
+                
+                <div class="control-group">
+                    <label class="control-item toggle-compact">
+                        <input type="checkbox" id="showOnlyNewToggle">
+                        <span class="toggle-label">Show only new</span>
+                    </label>
+                    <label class="control-item toggle-compact">
+                        <input type="checkbox" id="hideBroadcastsToggle">
+                        <span class="toggle-label">Hide broadcasts</span>
+                    </label>
+                </div>
+                
+                <div class="control-divider"></div>
+                
+                <div class="control-group">
+                    <button id="markAllReadButton" class="control-button">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M9 11l3 3L22 4"></path>
+                            <path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"></path>
+                        </svg>
+                        <span>Mark all read</span>
+                    </button>
+                    <button id="cleanupButton" class="control-button danger">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="3 6 5 6 21 6"></polyline>
+                            <path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"></path>
+                        </svg>
+                        <span>Clean old</span>
+                    </button>
+                    <button id="showPanelButton" class="control-button" style="display: none;" title="Show Stats">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M18 20V10"></path>
+                            <path d="M12 20V4"></path>
+                            <path d="M6 20v-6"></path>
+                        </svg>
+                    </button>
+                </div>
             </div>
             <div class="header-info">
                 <span class="status-indicator" id="connectionStatus"></span>
