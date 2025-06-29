@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { createServer } from '../src/server.js';
 import { toolDefinitions } from '../src/toolDefinitions.js';
 import { resourceDefinitions } from '../src/resourceDefinitions.js';
+import { promptDefinitions } from '../src/promptDefinitions.js';
 
 describe('MCP Server', () => {
   let server;
@@ -80,6 +81,47 @@ describe('MCP Server', () => {
     it('should list all available resources', () => {
       expect(resourceDefinitions).toHaveLength(1);
       expect(resourceDefinitions[0].uri).toBe('guide://how-to-communicate');
+    });
+  });
+
+  describe('Prompt definitions', () => {
+    it('should have prompts capability', () => {
+      expect(server._options.capabilities.prompts).toBeDefined();
+      expect(server._options.capabilities.prompts.listChanged).toBe(false);
+    });
+
+    it('should have agent onboarding prompt', () => {
+      const onboarding = promptDefinitions.find(p => p.name === 'agent-onboarding');
+      expect(onboarding).toBeDefined();
+      expect(onboarding.description).toContain('onboarding flow');
+      expect(onboarding.arguments).toHaveLength(2);
+      expect(onboarding.arguments[0].name).toBe('agent_name');
+      expect(onboarding.arguments[1].name).toBe('agent_role');
+    });
+
+    it('should have all essential prompts', () => {
+      const promptNames = promptDefinitions.map(p => p.name);
+      expect(promptNames).toContain('agent-onboarding');
+      expect(promptNames).toContain('agent-heartbeat-loop');
+      expect(promptNames).toContain('broadcast-announcement');
+      expect(promptNames).toContain('agent-status-report');
+      expect(promptNames).toContain('private-conversation');
+      expect(promptNames).toContain('wake-up-recovery');
+    });
+
+    it('should have valid prompt schemas', () => {
+      promptDefinitions.forEach(prompt => {
+        expect(prompt).toHaveProperty('name');
+        expect(prompt).toHaveProperty('description');
+        expect(prompt).toHaveProperty('arguments');
+        expect(Array.isArray(prompt.arguments)).toBe(true);
+        
+        prompt.arguments.forEach(arg => {
+          expect(arg).toHaveProperty('name');
+          expect(arg).toHaveProperty('description');
+          expect(arg).toHaveProperty('required');
+        });
+      });
     });
   });
 });

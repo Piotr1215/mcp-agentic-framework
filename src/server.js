@@ -4,9 +4,12 @@ import {
   ListToolsRequestSchema,
   ListResourcesRequestSchema,
   ReadResourceRequestSchema,
+  ListPromptsRequestSchema,
+  GetPromptRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 import { toolDefinitions } from './toolDefinitions.js';
 import { resourceDefinitions, getResourceContent } from './resourceDefinitions.js';
+import { promptDefinitions, getPromptContent } from './promptDefinitions.js';
 import { 
   registerAgent, 
   unregisterAgent, 
@@ -35,8 +38,12 @@ export function createServer() {
           // We support resources
           listChanged: false
         },
+        prompts: {
+          // We support prompts
+          listChanged: false
+        },
         // Future capabilities can be added:
-        // prompts: {},
+        // sampling: {},
         // logging: {},
         // completions: {}
       },
@@ -78,6 +85,43 @@ export function createServer() {
       };
     } catch (error) {
       throw Errors.resourceNotFound(uri);
+    }
+  });
+
+  // Define available prompts
+  server.setRequestHandler(ListPromptsRequestSchema, async () => ({
+    prompts: promptDefinitions,
+  }));
+
+  // Handle prompt generation
+  server.setRequestHandler(GetPromptRequestSchema, async (request) => {
+    const { name, arguments: args = {} } = request.params;
+    
+    try {
+      const prompt = promptDefinitions.find(p => p.name === name);
+      if (!prompt) {
+        throw Errors.promptNotFound(name);
+      }
+      
+      const content = await getPromptContent(name, args);
+      
+      return {
+        description: prompt.description,
+        messages: [
+          {
+            role: 'user',
+            content: {
+              type: 'text',
+              text: content
+            }
+          }
+        ]
+      };
+    } catch (error) {
+      if (error.message.includes('Unknown prompt')) {
+        throw Errors.promptNotFound(name);
+      }
+      throw Errors.internalError(error.message);
     }
   });
 

@@ -57,6 +57,9 @@ export const Errors = {
   toolNotFound: (tool) => 
     createError(ErrorCodes.INVALID_PARAMS, `Unknown tool: ${tool}`),
   
+  promptNotFound: (prompt) => 
+    createError(ErrorCodes.METHOD_NOT_FOUND, `Prompt not found: ${prompt}`),
+  
   internalError: (message, data) => 
     createError(ErrorCodes.INTERNAL_ERROR, message || 'Internal server error', data),
   
