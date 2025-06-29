@@ -16,8 +16,6 @@ const state = {
     showOnlyNew: false,
     lastSeenTimestamp: null,
     hideBroadcasts: false,
-    speakingStickHolder: null, // Track who has the speaking stick
-    speakingStickMode: 'chaos' // Track current mode
 };
 
 // DOM Elements
@@ -243,9 +241,8 @@ async function refreshAgents() {
             arguments: {}
         });
         
-        // Fetch speaking stick status
-        await fetchSpeakingStickStatus();
-        
+        // Status updates removed
+                
         if (result && result.structuredContent && result.structuredContent.agents) {
             state.agents = result.structuredContent.agents;
             renderAgentList();
@@ -285,7 +282,7 @@ function renderAgentList() {
     `;
     
     agentListHtml += state.agents.map(agent => {
-        const hasSpeakingStick = state.speakingStickHolder === agent.id;
+        const hasSpeakingStick = false;
         return `
             <div class="agent-item ${agent.id === state.selectedAgentId ? 'active' : ''}" 
                  data-agent-id="${agent.id}">
@@ -298,7 +295,6 @@ function renderAgentList() {
                     <div class="agent-status">
                         <span class="status-dot ${agent.status}"></span>
                         ${agent.status}
-                        ${state.speakingStickMode === 'speaking-stick' && !hasSpeakingStick ? '(listening)' : ''}
                     </div>
                 </div>
             </div>
@@ -489,36 +485,14 @@ function renderChatView() {
     
 }
 
-// Fetch speaking stick status
+// Removed speaking stick functionality
 async function fetchSpeakingStickStatus() {
-    try {
-        const response = await fetch('http://127.0.0.1:3113/monitor/speaking-stick');
-        const data = await response.json();
-        
-        if (data.success && data.speakingStick) {
-            state.speakingStickHolder = data.speakingStick.currentHolder;
-            state.speakingStickMode = data.speakingStick.mode;
-            
-            // Debug log
-            console.log('Speaking stick status:', {
-                mode: state.speakingStickMode,
-                holder: state.speakingStickHolder,
+    // No longer needed - function kept for compatibility
+                holder: null,
                 queue: data.speakingStick.queue
             });
             
-            // Update UI display
-            if (elements.speakingStickStatus) {
-                if (state.speakingStickMode === 'chaos') {
-                    elements.speakingStickStatus.innerHTML = '🎭 Chaos Mode';
-                    elements.speakingStickStatus.style.color = '#FF9800';
-                } else {
-                    const holderAgent = state.agents.find(a => a.id === state.speakingStickHolder);
-                    const holderName = holderAgent ? holderAgent.name : 'Unknown';
-                    const queueSize = data.speakingStick.queue ? data.speakingStick.queue.length : 0;
-                    elements.speakingStickStatus.innerHTML = `🎤 ${holderName} has stick (${queueSize} waiting)`;
-                    elements.speakingStickStatus.style.color = '#4CAF50';
-                }
-            }
+            // Update UI display - speaking stick removed
             return true;
         }
     } catch (error) {
@@ -560,7 +534,6 @@ async function pollMessages() {
                 // Filter out system messages
                 if (msg.message && (
                     msg.message.includes('[MODE CHANGE]') ||
-                    msg.message.includes('speaking stick') ||
                     msg.message.includes('Previous holder') ||
                     msg.message.includes('summary:')
                 )) {
@@ -826,17 +799,15 @@ async function init() {
     
     await refreshAgents();
     
-    // Fetch initial speaking stick status
-    await fetchSpeakingStickStatus();
-    
+    // Initial status fetch removed
+        
     // Show all messages by default
     renderChatView();
     
-    // Start polling for messages and speaking stick status
+    // Start polling for messages
     state.pollingInterval = setInterval(async () => {
         await pollMessages();
-        await fetchSpeakingStickStatus();
-        renderAgentList(); // Re-render to update speaking stick indicator
+                renderAgentList(); // Re-render to update agent list
     }, 1500); // Poll every 1.5 seconds
 }
 

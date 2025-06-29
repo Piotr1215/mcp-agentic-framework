@@ -17,14 +17,6 @@ import {
   getPendingNotifications,
   setPushNotificationSender
 } from './tools.js';
-import {
-  requestSpeakingStick,
-  grantSpeakingStickTo,
-  releaseSpeakingStick,
-  setCommunicationMode,
-  trackSpeakingViolation,
-  nudgeSilentAgents
-} from './speakingStick.js';
 import { Errors, MCPError } from './errors.js';
 
 export function createServer() {
@@ -122,34 +114,6 @@ export function createServer() {
           return await getPendingNotifications(agent_id);
         }
 
-        case 'grant-speaking-stick-to': {
-          const { granting_agent, target_agent, topic, privilege_level } = args;
-          return await grantSpeakingStickTo(granting_agent, target_agent, topic, privilege_level);
-        }
-        
-        case 'request-speaking-stick': {
-          const { requesting_agent, topic, urgent, privilege_level } = args;
-          return await requestSpeakingStick(requesting_agent, topic, urgent, privilege_level);
-        }
-
-        case 'release-speaking-stick': {
-          const { releasing_agent, summary, pass_to_specific } = args;
-          return await releaseSpeakingStick(releasing_agent, summary, pass_to_specific);
-        }
-
-        case 'set-communication-mode': {
-          const { mode, initiated_by, enforcement_level } = args;
-          return await setCommunicationMode(mode, initiated_by, enforcement_level);
-        }
-
-        case 'track-speaking-violation': {
-          const { violating_agent, violation_type, context } = args;
-          return await trackSpeakingViolation(violating_agent, violation_type, context);
-        }
-
-        case 'nudge-silent-agents': {
-          return await nudgeSilentAgents();
-        }
 
         default:
           throw Errors.toolNotFound(name);

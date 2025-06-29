@@ -4,7 +4,6 @@ import { createNotificationManager } from './lib/notificationManager.js';
 import { createInstanceTracker } from './lib/instanceTracker.js';
 import { Errors, MCPError } from './errors.js';
 import { textResponse, structuredResponse, createMetadata } from './response-formatter.js';
-import { getSpeakingStickState, trackSpeakingViolation, getViolationCount, releaseSpeakingStick } from './speakingStick.js';
 import * as path from 'path';
 
 // Initialize storage paths
@@ -14,27 +13,12 @@ const STORAGE_DIR = process.env.NODE_ENV === 'test'
 const AGENTS_STORAGE = path.join(STORAGE_DIR, 'agents.json');
 const MESSAGES_DIR = path.join(STORAGE_DIR, 'messages');
 
-// Create speaking stick aware notification manager
-const createSpeakingStickAwareNotificationManager = () => {
-  const baseManager = createNotificationManager();
-  
-  // Add violation tracking methods
-  baseManager.trackViolation = async (agentId, violationType) => {
-    const result = await trackSpeakingViolation(agentId, violationType, 'Attempted broadcast without stick');
-    return result;
-  };
-  
-  baseManager.getViolationCount = (agentId) => {
-    return getViolationCount(agentId);
-  };
-  
-  return baseManager;
-};
+// Create notification manager first
+let notificationManager = createNotificationManager();
 
 // Create instances - these will be reset in tests
-let notificationManager = createSpeakingStickAwareNotificationManager();
 let agentRegistry = createAgentRegistry(AGENTS_STORAGE, notificationManager);
-let messageStore = createMessageStore(MESSAGES_DIR, notificationManager, getSpeakingStickState);
+let messageStore = createMessageStore(MESSAGES_DIR, notificationManager);
 let instanceTracker = createInstanceTracker();
 
 // Function to set push notification sender (called by server after initialization)
@@ -44,29 +28,6 @@ export function setPushNotificationSender(sender) {
   }
 }
 
-// Function to get registry instance (for speaking stick)
-export function getAgentRegistry() {
-  return agentRegistry;
-}
-
-// Function to get message store instance (for speaking stick)
-export function getMessageStore() {
-  return messageStore;
-}
-
-// Function to reset instances (for testing)
-export function resetInstances() {
-  // Use unique paths for each reset in test mode
-  notificationManager = createSpeakingStickAwareNotificationManager();
-  if (process.env.NODE_ENV === 'test') {
-    const testDir = `/tmp/mcp-agentic-framework-test-${process.pid}-${Date.now()}`;
-    agentRegistry = createAgentRegistry(path.join(testDir, 'agents.json'), notificationManager);
-    messageStore = createMessageStore(path.join(testDir, 'messages'), notificationManager, getSpeakingStickState);
-  } else {
-    agentRegistry = createAgentRegistry(AGENTS_STORAGE, notificationManager);
-    messageStore = createMessageStore(MESSAGES_DIR, notificationManager, getSpeakingStickState);
-  }
-}
 
 /**
  * Register a new agent
@@ -105,44 +66,7 @@ export async function registerAgent(name, description, instanceId = null) {
  */
 export async function unregisterAgent(id) {
   const startTime = Date.now();
-  
-  try {
-    // Check if this agent holds the speaking stick
-    const stickState = getSpeakingStickState();
-    if (stickState.currentHolder === id) {
-      // Find the best candidate to pass the stick to
-      let passToAgent = null;
-      
-      // First, try to find a Leader agent
-      const allAgents = await agentRegistry.discoverAgents();
-      const leaderAgent = allAgents.find(agent => 
-        agent.id !== id && 
-        (agent.description.toLowerCase().includes('leader') || 
-         agent.description.toLowerCase().includes('custodian'))
-      );
-      
-      if (leaderAgent) {
-        passToAgent = leaderAgent.id;
-      } else if (stickState.queue.length > 0) {
-        // Pass to next in queue
-        passToAgent = stickState.queue[0];
-      } else {
-        // Pass to any other active agent
-        const otherAgent = allAgents.find(agent => agent.id !== id);
-        if (otherAgent) {
-          passToAgent = otherAgent.id;
-        }
-      }
-      
-      // Release the stick with specific pass-to agent
-      await releaseSpeakingStick(id, 'Agent deregistering - passing stick', passToAgent);
-    }
-    
-    // Remove from speaking stick queue if present
-    if (stickState.queue.includes(id)) {
-      stickState.queue = stickState.queue.filter(agentId => agentId !== id);
-    }
-    
+  try {  
     const result = await agentRegistry.unregisterAgent(id);
     const metadata = createMetadata(startTime, { tool: 'unregister-agent' });
     
@@ -537,3 +461,25 @@ export async function unregisterAgentByInstance(instanceId) {
     throw Errors.internalError(error.message);
   }
 }
+
+
+// Export for testing
+export async function __resetForTesting() {
+  // Clean up storage in test mode
+  if (process.env.NODE_ENV === 'test') {
+    try {
+      const fs = await import('fs/promises');
+      await fs.rm(STORAGE_DIR, { recursive: true, force: true });
+    } catch (e) {
+      // Directory might not exist
+    }
+  }
+  
+  notificationManager = createNotificationManager();
+  agentRegistry = createAgentRegistry(AGENTS_STORAGE, notificationManager);
+  messageStore = createMessageStore(MESSAGES_DIR, notificationManager);
+  instanceTracker = createInstanceTracker();
+}
+
+// Alias for backward compatibility
+export const resetInstances = __resetForTesting;

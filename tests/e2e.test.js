@@ -14,7 +14,7 @@ describe('End-to-End Multi-Agent Communication', () => {
       // Directory might not exist
     }
     // Reset singleton instances
-    resetInstances();
+    await resetInstances();
   });
 
   afterEach(async () => {

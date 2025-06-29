@@ -16,7 +16,7 @@ describe('Broadcast Feature', () => {
       // Directory might not exist
     }
     // Reset singleton instances
-    resetInstances();
+    await resetInstances();
   });
 
   afterEach(async () => {

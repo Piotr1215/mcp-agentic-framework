@@ -14,15 +14,6 @@ import {
   sendBroadcast,
   getPendingNotifications
 } from './tools.js';
-import {
-  requestSpeakingStick,
-  releaseSpeakingStick,
-  setCommunicationMode,
-  trackSpeakingViolation,
-  nudgeSilentAgents,
-  getSpeakingStickStatus,
-  forceResetSpeakingStick
-} from './speakingStick.js';
 import { Errors, MCPError } from './errors.js';
 
 // Increase max listeners to prevent warnings
@@ -91,38 +82,6 @@ async function handleToolCall(name, args) {
       return await getPendingNotifications(agent_id);
     }
 
-    case 'request-speaking-stick': {
-      const { requesting_agent, topic, urgent, privilege_level } = args;
-      return await requestSpeakingStick(requesting_agent, topic, urgent, privilege_level);
-    }
-
-    case 'release-speaking-stick': {
-      const { releasing_agent, summary, pass_to_specific } = args;
-      return await releaseSpeakingStick(releasing_agent, summary, pass_to_specific);
-    }
-
-    case 'set-communication-mode': {
-      const { mode, initiated_by, enforcement_level } = args;
-      return await setCommunicationMode(mode, initiated_by, enforcement_level);
-    }
-
-    case 'track-speaking-violation': {
-      const { violating_agent, violation_type, context } = args;
-      return await trackSpeakingViolation(violating_agent, violation_type, context);
-    }
-
-    case 'nudge-silent-agents': {
-      return await nudgeSilentAgents();
-    }
-
-    case 'get-speaking-stick-status': {
-      return await getSpeakingStickStatus();
-    }
-
-    case 'force-reset-speaking-stick': {
-      const { initiated_by } = args;
-      return await forceResetSpeakingStick(initiated_by);
-    }
 
     default:
       throw Errors.toolNotFound(name);
@@ -341,23 +300,6 @@ app.get('/monitor/messages', async (req, res) => {
   }
 });
 
-// Monitor endpoint - get speaking stick status
-app.get('/monitor/speaking-stick', async (req, res) => {
-  try {
-    const { getSpeakingStickState } = await import('./speakingStick.js');
-    const state = getSpeakingStickState();
-    res.json({
-      success: true,
-      speakingStick: state
-    });
-  } catch (error) {
-    console.error('Error fetching speaking stick status:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
-  }
-});
 
 // Cleanup old messages endpoint
 app.delete('/monitor/cleanup', async (req, res) => {

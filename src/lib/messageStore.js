@@ -125,7 +125,7 @@ const filterMessagesForAgent = (messages, agentId, options = {}) => {
 };
 
 // Main factory function
-export const createMessageStore = (storageDir, notificationManager = null, speakingStickGetter = null) => {
+export const createMessageStore = (storageDir, notificationManager = null) => {
   // No locking needed since each message is in its own file
   
   const sendMessage = async (from, to, message) => {
@@ -190,134 +190,9 @@ export const createMessageStore = (storageDir, notificationManager = null, speak
     validateAgentId(from, 'From');
     validateMessageContent(message);
 
-    // Check speaking stick enforcement
-    if (speakingStickGetter) {
-      const stickState = speakingStickGetter();
-      
-      // If in speaking-stick mode with enforcement
-      if (stickState.mode === 'speaking-stick' && 
-          stickState.enforcementLevel !== 'suggestion') {
-        
-        // Check if sender has the stick
-        if (stickState.currentHolder !== from.trim()) {
-          // Track violation
-          let totalViolations = 1;
-          if (notificationManager && notificationManager.trackViolation) {
-            const violationResult = await notificationManager.trackViolation(from.trim(), 'spoke-without-stick');
-            totalViolations = notificationManager.getViolationCount(from.trim());
-          }
-          
-          // Get current holder name and queue info for enhanced error messages
-          let currentHolderName = null;
-          let queueLength = stickState.queue.length;
-          
-          if (stickState.currentHolder && agentRegistry) {
-            try {
-              const agents = await agentRegistry.getAllAgents();
-              const holder = agents.find(a => a.id === stickState.currentHolder);
-              if (holder) {
-                currentHolderName = holder.name;
-              }
-            } catch (e) {
-              // Silent fail
-            }
-          }
-          
-          // Determine error message and additional info
-          let errorMessage = 'ERROR: Broadcast not sent. Request speaking stick first.';
-          let suggestion = null;
-          
-          if (!stickState.currentHolder) {
-            errorMessage = 'ERROR: Broadcast not sent. No one holds the speaking stick.';
-            suggestion = 'Request it first with request-speaking-stick.';
-          } else if (currentHolderName) {
-            // Enhanced error message with holder name and queue info
-            errorMessage = `ERROR: Broadcast not sent. ${currentHolderName} currently has the stick`;
-            if (queueLength > 0) {
-              errorMessage += ` with ${queueLength} agent${queueLength === 1 ? '' : 's'} waiting.`;
-              const queuePos = stickState.queue.indexOf(from.trim()) + 1;
-              if (queuePos > 0) {
-                suggestion = `You are #${queuePos} in the queue.`;
-              } else {
-                suggestion = `Request the stick to join the queue (you would be #${queueLength + 1}).`;
-              }
-            } else {
-              errorMessage += '.';
-              suggestion = 'Request the stick to speak next.';
-            }
-          }
-          
-          // Check if we need to broadcast violation
-          let violationBroadcast = false;
-          let notifiedAgents = [];
-          
-          if (stickState.enforcementLevel === 'social-pressure' && agentRegistry) {
-            try {
-              const allAgents = await agentRegistry.getAllAgents();
-              notifiedAgents = allAgents.filter(a => a.id !== from.trim()).map(a => a.id);
-              violationBroadcast = true;
-            } catch (e) {
-              // Silent fail on broadcast
-            }
-          }
-          
-          // Calculate social pressure level
-          let socialPressureLevel = 'mild';
-          if (totalViolations >= 6) {
-            socialPressureLevel = 'shame';
-          } else if (totalViolations >= 3) {
-            socialPressureLevel = 'moderate';
-          }
-          
-          // Determine consequence text
-          let consequence = `Violation #${totalViolations} recorded`;
-          if (totalViolations >= 6) {
-            consequence = `CHATTERBOX HALL OF SHAME!`;
-          } else if (totalViolations >= 3) {
-            consequence = `Added to chatterbox list.`;
-          }
-          
-          // Return error
-          return {
-            success: false,
-            recipientCount: 0,
-            error: errorMessage,
-            currentHolder: stickState.currentHolder,
-            currentHolderName: currentHolderName || undefined,
-            queueLength: queueLength,
-            queuePosition: stickState.queue.indexOf(from.trim()) >= 0 ? stickState.queue.indexOf(from.trim()) + 1 : undefined,
-            violationTracked: true,
-            totalViolations: totalViolations,
-            socialPressureLevel: socialPressureLevel,
-            consequence: consequence,
-            suggestion: suggestion || undefined,
-            violationBroadcast: violationBroadcast,
-            notifiedAgents: notifiedAgents.length > 0 ? notifiedAgents : undefined
-          };
-        }
-      } else if (stickState.mode === 'speaking-stick' && 
-                 stickState.enforcementLevel === 'suggestion') {
-        // Just add a warning but allow broadcast
-        if (stickState.currentHolder !== from.trim()) {
-          // Continue with normal broadcast but add warning
-          // Will be added to the response below
-        }
-      }
-    }
-
     let recipientCount = 0;
     const errors = [];
     let warning = null;
-
-    // Check if we should add a warning for suggestion mode
-    if (speakingStickGetter) {
-      const stickState = speakingStickGetter();
-      if (stickState.mode === 'speaking-stick' && 
-          stickState.enforcementLevel === 'suggestion' &&
-          stickState.currentHolder !== from.trim()) {
-        warning = 'suggestion: You are broadcasting without the speaking stick';
-      }
-    }
 
     // If agentRegistry is provided, send actual messages to all agents
     if (agentRegistry) {

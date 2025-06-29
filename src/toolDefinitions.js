@@ -1,5 +1,3 @@
-import { speakingStickDefinitions } from './speakingStickDefinitions.js';
-
 export const toolDefinitions = [
   {
     name: 'register-agent',
@@ -415,5 +413,4 @@ export const toolDefinitions = [
       additionalProperties: false
     }
   },
-  ...speakingStickDefinitions
 ];

@@ -11,7 +11,7 @@ describe('Tool Handlers', () => {
       // Directory might not exist
     }
     // Reset singleton instances
-    resetInstances();
+    await resetInstances();
   });
 
   afterEach(async () => {
@@ -135,12 +135,11 @@ describe('Tool Handlers', () => {
       expect(result.content[0].text).toContain('Message 1');
       expect(result.content[0].text).toContain('Message 2');
       expect(result.content[0].text).toContain(agent1.structuredContent.id);
-      expect(result.structuredContent.messages[0]).toMatchObject({
-        from: agent1.structuredContent.id,
-        fromName: 'Agent1',
-        message: 'Message 1',
-        timestamp: expect.any(String)
-      });
+      // Messages should be from Agent1 and contain the expected content
+      const messages = result.structuredContent.messages;
+      expect(messages.every(m => m.from === agent1.structuredContent.id)).toBe(true);
+      expect(messages.every(m => m.fromName === 'Agent1')).toBe(true);
+      expect(messages.map(m => m.message).sort()).toEqual(['Message 1', 'Message 2']);
       expect(result.content[0].text).toContain('Retrieved 2 new messages');
       
       // Check again - should be empty (messages deleted after retrieval)

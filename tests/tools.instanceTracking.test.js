@@ -10,7 +10,7 @@ import * as fs from 'fs/promises';
 
 describe('Tool Handlers - Instance Tracking', () => {
   beforeEach(async () => {
-    resetInstances();
+    await resetInstances();
   });
   
   afterEach(async () => {

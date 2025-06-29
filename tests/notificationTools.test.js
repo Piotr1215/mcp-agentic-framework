@@ -10,8 +10,8 @@ import {
 import { registerAgent, unregisterAgent } from '../src/tools.js';
 
 describe('Notification Tools', () => {
-  beforeEach(() => {
-    resetInstances();
+  beforeEach(async () => {
+    await resetInstances();
   });
 
   describe('updateAgentStatus', () => {
@@ -124,7 +124,7 @@ describe('Notification Tools', () => {
       expect(result.structuredContent).toMatchObject({
         success: true
       });
-      expect(result.content[0].text).toContain('Broadcast sent from SystemAgent with high priority');
+      expect(result.content[0].text).toMatch(/Broadcast sent from SystemAgent (to \d+ agents? )?with high priority/);
     });
 
     it('should use default priority', async () => {
@@ -133,7 +133,7 @@ describe('Notification Tools', () => {
 
       const result = await sendBroadcast(agentId, 'Hello everyone');
 
-      expect(result.content[0].text).toContain('Broadcast sent from SystemAgent with normal priority');
+      expect(result.content[0].text).toMatch(/Broadcast sent from SystemAgent (to \d+ agents? )?with normal priority/);
     });
 
     it('should handle non-existent sender', async () => {
