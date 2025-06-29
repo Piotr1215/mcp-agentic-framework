@@ -2,8 +2,11 @@ import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
+  ListResourcesRequestSchema,
+  ReadResourceRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 import { toolDefinitions } from './toolDefinitions.js';
+import { resourceDefinitions, getResourceContent } from './resourceDefinitions.js';
 import { 
   registerAgent, 
   unregisterAgent, 
@@ -28,8 +31,11 @@ export function createServer() {
           // We don't support dynamic tool list changes
           listChanged: false
         },
+        resources: {
+          // We support resources
+          listChanged: false
+        },
         // Future capabilities can be added:
-        // resources: {},
         // prompts: {},
         // logging: {},
         // completions: {}
@@ -55,6 +61,25 @@ export function createServer() {
   server.setRequestHandler(ListToolsRequestSchema, async () => ({
     tools: toolDefinitions,
   }));
+
+  // Define available resources
+  server.setRequestHandler(ListResourcesRequestSchema, async () => ({
+    resources: resourceDefinitions,
+  }));
+
+  // Handle resource reads
+  server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
+    const { uri } = request.params;
+    
+    try {
+      const content = await getResourceContent(uri);
+      return {
+        contents: [content]
+      };
+    } catch (error) {
+      throw Errors.resourceNotFound(uri);
+    }
+  });
 
   // Handle tool calls
   server.setRequestHandler(CallToolRequestSchema, async (request) => {

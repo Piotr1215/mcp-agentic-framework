@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { createServer } from '../src/server.js';
 import { toolDefinitions } from '../src/toolDefinitions.js';
+import { resourceDefinitions } from '../src/resourceDefinitions.js';
 
 describe('MCP Server', () => {
   let server;
@@ -18,6 +19,11 @@ describe('MCP Server', () => {
     it('should have tools capability', () => {
       expect(server._options.capabilities.tools).toBeDefined();
       expect(server._options.capabilities.tools.listChanged).toBe(false);
+    });
+
+    it('should have resources capability', () => {
+      expect(server._options.capabilities.resources).toBeDefined();
+      expect(server._options.capabilities.resources.listChanged).toBe(false);
     });
   });
 
@@ -59,6 +65,21 @@ describe('MCP Server', () => {
       toolDefinitions.forEach(tool => {
         expect(tool.name).toMatch(/^[a-z]+(-[a-z]+)*$/);
       });
+    });
+  });
+
+  describe('Resource definitions', () => {
+    it('should have HOW_TO_COMMUNICATE guide as a resource', () => {
+      const guide = resourceDefinitions.find(r => r.uri === 'guide://how-to-communicate');
+      expect(guide).toBeDefined();
+      expect(guide.name).toBe('Agent Communication Guide');
+      expect(guide.description).toContain('Essential guide for agents');
+      expect(guide.mimeType).toBe('text/markdown');
+    });
+
+    it('should list all available resources', () => {
+      expect(resourceDefinitions).toHaveLength(1);
+      expect(resourceDefinitions[0].uri).toBe('guide://how-to-communicate');
     });
   });
 });
