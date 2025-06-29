@@ -2,6 +2,8 @@ import express from 'express';
 import cors from 'cors';
 import { EventEmitter } from 'events';
 import { toolDefinitions } from './toolDefinitions.js';
+import { resourceDefinitions, getResourceContent } from './resourceDefinitions.js';
+import { promptDefinitions, getPromptContent } from './promptDefinitions.js';
 import { 
   registerAgent, 
   unregisterAgent, 
@@ -9,7 +11,10 @@ import {
   sendMessage, 
   checkForMessages,
   updateAgentStatus,
-  sendBroadcast
+  sendBroadcast,
+  subscribeToNotifications,
+  unsubscribeFromNotifications,
+  getPendingNotifications
 } from './tools.js';
 import { Errors, MCPError } from './errors.js';
 
@@ -79,7 +84,6 @@ async function handleToolCall(name, args) {
       return await getPendingNotifications(agent_id);
     }
 
-
     default:
       throw Errors.toolNotFound(name);
   }
@@ -113,7 +117,10 @@ app.post('/mcp', async (req, res) => {
         result: {
           protocolVersion: '2025-06-18',
           capabilities: {
-            tools: {}
+            tools: {},
+            resources: {},
+            prompts: {},
+            sampling: {}
           },
           serverInfo: {
             name: 'mcp-agentic-framework',
@@ -145,6 +152,116 @@ app.post('/mcp', async (req, res) => {
       res.json(response);
       console.log('Sent tools list');
       return;
+    }
+
+    // Handle resources/list
+    if (message.method === 'resources/list') {
+      const response = {
+        jsonrpc: '2.0',
+        id: message.id,
+        result: {
+          resources: resourceDefinitions
+        }
+      };
+      res.setHeader('MCP-Protocol-Version', '2025-06-18');
+      res.json(response);
+      console.log('Sent resources list');
+      return;
+    }
+
+    // Handle resources/read
+    if (message.method === 'resources/read') {
+      const { uri } = message.params;
+      console.log('Reading resource:', uri);
+      
+      try {
+        const content = await getResourceContent(uri);
+        const response = {
+          jsonrpc: '2.0',
+          id: message.id,
+          result: {
+            contents: [content]
+          }
+        };
+        res.setHeader('MCP-Protocol-Version', '2025-06-18');
+        res.json(response);
+        console.log('Sent resource content');
+        return;
+      } catch (error) {
+        const errorResponse = {
+          jsonrpc: '2.0',
+          id: message.id,
+          error: {
+            code: -32602,
+            message: `Resource not found: ${uri}`
+          }
+        };
+        res.setHeader('MCP-Protocol-Version', '2025-06-18');
+        res.status(404).json(errorResponse);
+        return;
+      }
+    }
+
+    // Handle prompts/list
+    if (message.method === 'prompts/list') {
+      const response = {
+        jsonrpc: '2.0',
+        id: message.id,
+        result: {
+          prompts: promptDefinitions
+        }
+      };
+      res.setHeader('MCP-Protocol-Version', '2025-06-18');
+      res.json(response);
+      console.log('Sent prompts list');
+      return;
+    }
+
+    // Handle prompts/get
+    if (message.method === 'prompts/get') {
+      const { name, arguments: args = {} } = message.params;
+      console.log('Getting prompt:', name, 'with args:', args);
+      
+      try {
+        const prompt = promptDefinitions.find(p => p.name === name);
+        if (!prompt) {
+          throw new Error(`Prompt not found: ${name}`);
+        }
+        
+        const content = await getPromptContent(name, args);
+        const response = {
+          jsonrpc: '2.0',
+          id: message.id,
+          result: {
+            description: prompt.description,
+            messages: [
+              {
+                role: 'user',
+                content: {
+                  type: 'text',
+                  text: content
+                }
+              }
+            ]
+          }
+        };
+        res.setHeader('MCP-Protocol-Version', '2025-06-18');
+        res.json(response);
+        console.log('Sent prompt content');
+        return;
+      } catch (error) {
+        const errorResponse = {
+          jsonrpc: '2.0',
+          id: message.id,
+          error: {
+            code: -32602,
+            message: error.message
+          }
+        };
+        res.setHeader('MCP-Protocol-Version', '2025-06-18');
+        res.status(404).json(errorResponse);
+        return;
+      }
     }
 
     // Handle tool calls

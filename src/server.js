@@ -19,9 +19,7 @@ import {
   updateAgentStatus,
   sendBroadcast,
   setPushNotificationSender,
-  setMcpServer,
-  agentAiAssist,
-  intelligentBroadcast
+  setMcpServer
 } from './tools.js';
 import { Errors, MCPError } from './errors.js';
 
@@ -170,16 +168,6 @@ export function createServer() {
         case 'send-broadcast': {
           const { from, message, priority } = args;
           return await sendBroadcast(from, message, priority);
-        }
-
-        case 'agent-ai-assist': {
-          const { agent_id, context, request_type } = args;
-          return await agentAiAssist(agent_id, context, request_type);
-        }
-
-        case 'intelligent-broadcast': {
-          const { from, message, auto_priority, enhance_message } = args;
-          return await intelligentBroadcast(from, message, auto_priority, enhance_message);
         }
 
         default:

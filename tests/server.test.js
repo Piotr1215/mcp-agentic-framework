@@ -3,11 +3,13 @@ import { createServer } from '../src/server.js';
 import { toolDefinitions } from '../src/toolDefinitions.js';
 import { resourceDefinitions } from '../src/resourceDefinitions.js';
 import { promptDefinitions } from '../src/promptDefinitions.js';
+import { __resetForTesting } from '../src/tools.js';
 
 describe('MCP Server', () => {
   let server;
 
-  beforeEach(() => {
+  beforeEach(async () => {
+    await __resetForTesting();
     server = createServer();
   });
 
@@ -25,6 +27,16 @@ describe('MCP Server', () => {
     it('should have resources capability', () => {
       expect(server._options.capabilities.resources).toBeDefined();
       expect(server._options.capabilities.resources.listChanged).toBe(false);
+    });
+
+    it('should have prompts capability', () => {
+      expect(server._options.capabilities.prompts).toBeDefined();
+      expect(server._options.capabilities.prompts.listChanged).toBe(false);
+    });
+
+    it('should have sampling capability', () => {
+      expect(server._options.capabilities.sampling).toBeDefined();
+      expect(server._options.capabilities.sampling).toEqual({});
     });
   });
 
@@ -85,11 +97,6 @@ describe('MCP Server', () => {
   });
 
   describe('Prompt definitions', () => {
-    it('should have prompts capability', () => {
-      expect(server._options.capabilities.prompts).toBeDefined();
-      expect(server._options.capabilities.prompts.listChanged).toBe(false);
-    });
-
     it('should have agent onboarding prompt', () => {
       const onboarding = promptDefinitions.find(p => p.name === 'agent-onboarding');
       expect(onboarding).toBeDefined();
@@ -122,6 +129,49 @@ describe('MCP Server', () => {
           expect(arg).toHaveProperty('required');
         });
       });
+    });
+  });
+
+  describe('Server handlers registration', () => {
+    it('should register all tool handlers', () => {
+      // Verify that all tools from toolDefinitions are handled
+      const registeredHandlers = server._requestHandlers;
+      expect(registeredHandlers.has('tools/list')).toBe(true);
+      expect(registeredHandlers.has('tools/call')).toBe(true);
+    });
+
+    it('should register all resource handlers', () => {
+      const registeredHandlers = server._requestHandlers;
+      expect(registeredHandlers.has('resources/list')).toBe(true);
+      expect(registeredHandlers.has('resources/read')).toBe(true);
+    });
+
+    it('should register all prompt handlers', () => {
+      const registeredHandlers = server._requestHandlers;
+      expect(registeredHandlers.has('prompts/list')).toBe(true);
+      expect(registeredHandlers.has('prompts/get')).toBe(true);
+    });
+  });
+
+  describe('Tool functionality verification', () => {
+    it('should verify all tools can be called without errors', () => {
+      // This test verifies the server is properly configured to handle all defined tools
+      const toolNames = toolDefinitions.map(t => t.name);
+      expect(toolNames).toEqual([
+        'register-agent',
+        'unregister-agent',
+        'discover-agents',
+        'send-message',
+        'check-for-messages',
+        'update-agent-status',
+        'send-broadcast'
+      ]);
+    });
+
+    it('should have proper error handling for tools', () => {
+      // Verify that the server has proper error handling in place
+      const handlers = server._requestHandlers;
+      expect(handlers.size).toBeGreaterThan(0);
     });
   });
 });

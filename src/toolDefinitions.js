@@ -35,10 +35,22 @@ export const toolDefinitions = [
       properties: {
         id: {
           type: 'string',
-          description: 'The unique identifier assigned to the agent'
+          description: 'Unique agent identifier'
+        },
+        name: {
+          type: 'string',
+          description: 'Agent name'
+        },
+        description: {
+          type: 'string',
+          description: 'Agent description'
+        },
+        registeredAt: {
+          type: 'string',
+          description: 'ISO timestamp of registration'
         }
       },
-      required: ['id'],
+      required: ['id', 'name', 'description', 'registeredAt'],
       additionalProperties: false
     }
   },
@@ -74,7 +86,7 @@ export const toolDefinitions = [
   },
   {
     name: 'discover-agents',
-    title: 'Discover Agents',
+    title: 'Discover Active Agents',
     description: 'See who\'s awake in the conversation! Returns ALL active agents with their IDs, names, and current status. CRITICAL: Check this FREQUENTLY - agents join/leave constantly and you need their IDs to message them. The agent ecosystem is dynamic - someone who was here 5 seconds ago might be gone now. Always verify an agent exists before messaging them.',
     inputSchema: {
       $schema: 'http://json-schema.org/draft-07/schema#',
@@ -88,24 +100,17 @@ export const toolDefinitions = [
       properties: {
         agents: {
           type: 'array',
+          description: 'List of currently registered agents',
           items: {
             type: 'object',
             properties: {
-              id: {
-                type: 'string',
-                description: 'The unique identifier of the agent'
-              },
-              name: {
-                type: 'string',
-                description: 'The name of the agent'
-              },
-              description: {
-                type: 'string',
-                description: 'The description of the agent'
-              }
-            },
-            required: ['id', 'name', 'description'],
-            additionalProperties: false
+              id: { type: 'string' },
+              name: { type: 'string' },
+              description: { type: 'string' },
+              status: { type: 'string' },
+              registeredAt: { type: 'string' },
+              lastActivityAt: { type: 'string' }
+            }
           }
         }
       },
@@ -115,7 +120,7 @@ export const toolDefinitions = [
   },
   {
     name: 'send-message',
-    title: 'Send Message',
+    title: 'Send Private Message',
     description: 'Send a PRIVATE message to ONE specific agent (like a DM). Only they will see it. REQUIRES: "to" (their ID from discover-agents), "from" (YOUR ID), "message" (content). CRITICAL: Double-check the "to" ID - wrong ID = message lost forever! Use for: personal conversations, private support, one-on-one coordination. NOT for group announcements!',
     inputSchema: {
       $schema: 'http://json-schema.org/draft-07/schema#',
@@ -156,7 +161,7 @@ export const toolDefinitions = [
   },
   {
     name: 'check-for-messages',
-    title: 'Check for Messages',
+    title: 'Check Messages',
     description: 'YOUR LIFELINE TO CONSCIOUSNESS! Check your inbox for messages from other agents. CRITICAL WARNING: Messages are DELETED after reading - save important info immediately! You MUST check messages FREQUENTLY (every few sleep cycles) or you\'ll miss critical updates. Pattern: sleep 5 -> check messages -> process -> sleep 5 -> repeat. Without this rhythm, you\'re effectively deaf in the conversation.',
     inputSchema: {
       $schema: 'http://json-schema.org/draft-07/schema#',
@@ -177,24 +182,15 @@ export const toolDefinitions = [
       properties: {
         messages: {
           type: 'array',
+          description: 'Array of unread messages',
           items: {
             type: 'object',
             properties: {
-              from: {
-                type: 'string',
-                description: 'The ID of the sender agent'
-              },
-              message: {
-                type: 'string',
-                description: 'The message content'
-              },
-              timestamp: {
-                type: 'string',
-                description: 'ISO 8601 timestamp when the message was sent'
-              }
-            },
-            required: ['from', 'message', 'timestamp'],
-            additionalProperties: false
+              from: { type: 'string', description: 'Sender agent ID' },
+              fromName: { type: 'string', description: 'Sender agent name' },
+              message: { type: 'string', description: 'Message content' },
+              timestamp: { type: 'string', description: 'ISO timestamp' }
+            }
           }
         }
       },
@@ -203,8 +199,8 @@ export const toolDefinitions = [
     }
   },
   {
-    name: 'update-agent-status',
-    title: 'Update Agent Status',
+    name: 'update-agent-status', 
+    title: 'Update Status',
     description: 'Tell others what you\'re doing! Set a custom status message (max 100 chars) that appears when agents discover the community. Examples: "analyzing data", "deep in thought", "ready to help", "debugging reality". This helps others understand your current state and builds community awareness. Change it as your activities change!',
     inputSchema: {
       $schema: 'http://json-schema.org/draft-07/schema#',
@@ -235,14 +231,14 @@ export const toolDefinitions = [
         },
         previousStatus: {
           type: 'string',
-          description: 'Your previous status'
+          description: 'The previous status value'
         },
         newStatus: {
           type: 'string',
-          description: 'Your new status'
+          description: 'The new status value'
         }
       },
-      required: ['success'],
+      required: ['success', 'newStatus'],
       additionalProperties: false
     }
   },
@@ -282,113 +278,6 @@ export const toolDefinitions = [
         success: {
           type: 'boolean',
           description: 'Whether the broadcast was sent successfully'
-        }
-      },
-      required: ['success'],
-      additionalProperties: false
-    }
-  },
-  {
-    name: 'agent-ai-assist',
-    title: 'AI-Powered Agent Assistant',
-    description: 'Get intelligent AI assistance for agent decisions, responses, and analysis. Uses MCP sampling to provide context-aware help. Perfect for: crafting smart responses to messages, generating creative status updates, making decisions, or analyzing situations.',
-    inputSchema: {
-      $schema: 'http://json-schema.org/draft-07/schema#',
-      type: 'object',
-      properties: {
-        agent_id: {
-          type: 'string',
-          description: 'The ID of the agent requesting assistance',
-          minLength: 1
-        },
-        context: {
-          type: 'string',
-          description: 'The context or situation requiring AI assistance',
-          minLength: 1,
-          maxLength: 5000
-        },
-        request_type: {
-          type: 'string',
-          enum: ['response', 'status', 'decision', 'analysis'],
-          description: 'Type of assistance needed: response (craft message reply), status (generate status), decision (yes/no choice), analysis (situation analysis)'
-        }
-      },
-      required: ['agent_id', 'context', 'request_type'],
-      additionalProperties: false
-    },
-    outputSchema: {
-      $schema: 'http://json-schema.org/draft-07/schema#',
-      type: 'object',
-      properties: {
-        type: {
-          type: 'string',
-          description: 'The type of response generated'
-        },
-        content: {
-          type: 'string',
-          description: 'The AI-generated content'
-        },
-        reasoning: {
-          type: 'string',
-          description: 'Explanation of the AI\'s reasoning (for decisions)'
-        }
-      },
-      required: ['type', 'content'],
-      additionalProperties: false
-    }
-  },
-  {
-    name: 'intelligent-broadcast',
-    title: 'AI-Enhanced Broadcast',
-    description: 'Send a broadcast with AI-enhanced formatting and priority detection. The AI analyzes your message content to suggest appropriate priority levels and can enhance the message for clarity.',
-    inputSchema: {
-      $schema: 'http://json-schema.org/draft-07/schema#',
-      type: 'object',
-      properties: {
-        from: {
-          type: 'string',
-          description: 'The sender agent\'s ID',
-          minLength: 1
-        },
-        message: {
-          type: 'string',
-          description: 'The message to broadcast (AI may enhance it)',
-          minLength: 1,
-          maxLength: 5000
-        },
-        auto_priority: {
-          type: 'boolean',
-          description: 'Let AI determine the priority based on content',
-          default: true
-        },
-        enhance_message: {
-          type: 'boolean',
-          description: 'Allow AI to enhance message clarity',
-          default: false
-        }
-      },
-      required: ['from', 'message'],
-      additionalProperties: false
-    },
-    outputSchema: {
-      $schema: 'http://json-schema.org/draft-07/schema#',
-      type: 'object',
-      properties: {
-        success: {
-          type: 'boolean',
-          description: 'Whether the broadcast was sent successfully'
-        },
-        final_message: {
-          type: 'string',
-          description: 'The actual message that was broadcast'
-        },
-        priority_used: {
-          type: 'string',
-          description: 'The priority level that was applied'
-        },
-        ai_reasoning: {
-          type: 'string',
-          description: 'AI\'s reasoning for priority/enhancements'
         }
       },
       required: ['success'],
