@@ -190,9 +190,9 @@ export async function checkForMessages(agentId) {
       };
     }));
     
-    // Delete messages after successful processing
+    // Mark messages as read instead of deleting - for better monitoring
     for (const msg of messages) {
-      await messageStore.deleteMessage(msg.id);
+      await messageStore.markMessageAsRead(msg.id);
     }
     
     const metadata = createMetadata(startTime, { 
