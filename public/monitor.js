@@ -12,10 +12,12 @@ const state = {
     pollingInterval: null,
     isConnected: false,
     reverseOrder: true, // Show newest first by default - new messages at top!
-    autoScroll: false, // Auto-scroll disabled by default - for slow readers!
     showOnlyNew: false,
     lastSeenTimestamp: null,
-    hideBroadcasts: false,
+    latestMessageAgent: null, // Track only the most recent message sender
+    speakingAgent: null, // For spin animation
+    glowTimeout: null, // Timeout for clearing glow
+    isFirstPoll: true, // Track first poll to prevent initial animations
 };
 
 // DOM Elements
@@ -25,20 +27,15 @@ const elements = {
     agentList: document.getElementById('agentList'),
     chatView: document.getElementById('chatView'),
     refreshButton: document.getElementById('refreshButton'),
-    systemLog: document.getElementById('systemLog'),
+    reverseOrderToggle: document.getElementById('reverseOrderToggle'),
+    showOnlyNewToggle: document.getElementById('showOnlyNewToggle'),
+    deleteAllButton: document.getElementById('deleteAllButton'),
     totalAgents: document.getElementById('totalAgents'),
     totalMessages: document.getElementById('totalMessages'),
     totalBroadcasts: document.getElementById('totalBroadcasts'),
     panelCollapseButton: document.getElementById('panelCollapseButton'),
     statsPanel: document.getElementById('statsPanel'),
-    reverseOrderToggle: document.getElementById('reverseOrderToggle'),
-    autoScrollToggle: document.getElementById('autoScrollToggle'),
-    showOnlyNewToggle: document.getElementById('showOnlyNewToggle'),
-    markAllReadButton: document.getElementById('markAllReadButton'),
-    cleanupButton: document.getElementById('cleanupButton'),
-    showPanelButton: document.getElementById('showPanelButton'),
-    hideBroadcastsToggle: document.getElementById('hideBroadcastsToggle'),
-    speakingStickStatus: document.getElementById('speakingStickStatus')
+    showPanelButton: document.getElementById('showPanelButton')
 };
 
 // Fun emojis for agents
@@ -49,15 +46,7 @@ const agentEmojiMap = new Map();
 
 // Utility Functions
 function log(message, type = 'info') {
-    const timestamp = new Date().toLocaleTimeString();
-    const logEntry = `[${timestamp}] ${type.toUpperCase()}: ${message}`;
-    elements.systemLog.textContent = logEntry + '\n' + elements.systemLog.textContent;
-    
-    // Keep log size manageable
-    const lines = elements.systemLog.textContent.split('\n');
-    if (lines.length > 50) {
-        elements.systemLog.textContent = lines.slice(0, 50).join('\n');
-    }
+    // Disabled for clean operation
 }
 
 function updateConnectionStatus(connected) {
@@ -221,10 +210,8 @@ async function initializeMcp() {
         });
         
         state.mcpSessionId = `monitor-${Date.now()}`;
-        log('Connected to MCP server', 'success');
         return true;
     } catch (error) {
-        log('Failed to connect to MCP server', 'error');
         return false;
     }
 }
@@ -245,14 +232,14 @@ async function refreshAgents() {
                 
         if (result && result.structuredContent && result.structuredContent.agents) {
             state.agents = result.structuredContent.agents;
-            renderAgentList();
+            // Only render if we're not in the middle of an animation
+            if (!state.speakingAgent) {
+                renderAgentList();
+            }
             updateStats();
-            log(`Found ${state.agents.length} active agents`, 'info');
-        } else {
-            log('No agents found or unexpected response format', 'warning');
         }
     } catch (error) {
-        log('Failed to fetch agents: ' + error.message, 'error');
+        // Silent fail
     } finally {
         elements.refreshButton.disabled = false;
         elements.refreshButton.innerHTML = '↻';
@@ -282,8 +269,11 @@ function renderAgentList() {
     `;
     
     agentListHtml += state.agents.map(agent => {
+        const isLatestSender = state.latestMessageAgent === agent.id;
+        const isSpeaking = state.speakingAgent === agent.id;
+        
         return `
-            <div class="agent-item ${agent.id === state.selectedAgentId ? 'active' : ''}" 
+            <div class="agent-item ${agent.id === state.selectedAgentId ? 'active' : ''} ${isLatestSender ? 'new-message' : ''} ${isSpeaking ? 'speaking' : ''}" 
                  data-agent-id="${agent.id}">
                 <div class="agent-avatar">${generateAvatar(agent.name, agent.id)}</div>
                 <div class="agent-info">
@@ -317,14 +307,15 @@ function renderAgentList() {
 function selectAgent(agentId) {
     // Toggle selection - clicking same agent deselects (shows all)
     state.selectedAgentId = (state.selectedAgentId === agentId) ? null : agentId;
+    
+    // Clear the new message indicator when agent is selected
+    if (agentId && agentId !== 'all' && state.latestMessageAgent === agentId) {
+        state.latestMessageAgent = null;
+    }
+    
     renderAgentList();
     renderChatView();
     
-    if (state.selectedAgentId) {
-        log(`Filtering messages for ${state.agents.find(a => a.id === agentId)?.name}`, 'info');
-    } else {
-        log('Showing all messages', 'info');
-    }
 }
 
 // Render chat view
@@ -342,12 +333,8 @@ function renderChatView() {
             // Always include messages FROM this agent
             if (msg.from === state.selectedAgentId) return true;
             
-            // For messages TO this agent, check if broadcast
-            if (msg.to === state.selectedAgentId) {
-                // If hiding broadcasts, exclude broadcast messages
-                if (state.hideBroadcasts && msg.isBroadcast) return false;
-                return true;
-            }
+            // Include messages TO this agent
+            if (msg.to === state.selectedAgentId) return true;
             
             return false;
         });
@@ -385,11 +372,6 @@ function renderChatView() {
         displayMessages = messages.filter(msg => 
             new Date(msg.timestamp) > new Date(state.lastSeenTimestamp)
         );
-    }
-    
-    // Filter out broadcasts if toggle is on
-    if (state.hideBroadcasts) {
-        displayMessages = displayMessages.filter(msg => !msg.isBroadcast);
     }
     
     if (displayMessages.length === 0) {
@@ -466,21 +448,23 @@ function renderChatView() {
     
     elements.chatView.innerHTML = html;
     
-    // Restore scroll position - STOP THE MOVEMENT!
-    if (!state.autoScroll) {
-        // Calculate the difference in height and adjust
-        const newScrollHeight = elements.chatView.scrollHeight;
-        const heightDiff = newScrollHeight - scrollHeight;
-        
-        // If showing oldest first, maintain position
-        if (!state.reverseOrder) {
-            elements.chatView.scrollTop = scrollTop;
-        } else {
-            // If showing newest first, adjust for new content at top
-            elements.chatView.scrollTop = scrollTop + heightDiff;
-        }
-    }
+    // ALWAYS maintain exact scroll position - no jumping!
+    setTimeout(() => {
+        elements.chatView.scrollTop = scrollTop;
+    }, 0);
     
+    // Clear the glow if we're showing all messages (user is seeing everything)
+    // DISABLED: This was clearing animations immediately
+    // if (!state.selectedAgentId && (state.latestMessageAgent || state.speakingAgent)) {
+    //     // User is viewing all messages, so they've seen the latest
+    //     state.latestMessageAgent = null;
+    //     state.speakingAgent = null;
+    //     if (state.glowTimeout) {
+    //         clearTimeout(state.glowTimeout);
+    //         state.glowTimeout = null;
+    //     }
+    //     renderAgentList();
+    // }
 }
 
 // Removed speaking stick functionality
@@ -502,59 +486,99 @@ async function pollMessages() {
         
         const allCombinedMessages = data.messages;
         
-        // Process all messages
-        let hasNewMessages = false;
-        allCombinedMessages.forEach(msg => {
-            const messageKey = msg.id;
-            if (state.processedMessageIds.has(messageKey)) return;
-            state.processedMessageIds.add(messageKey);
-            hasNewMessages = true;
-        });
+        // First, deduplicate and process messages
+        const messageMap = new Map();
+        const broadcastSignatures = new Set();
         
-        if (hasNewMessages) {
-            log(`Found ${allCombinedMessages.length} messages`, 'info');
+        allCombinedMessages.forEach(msg => {
+            // Filter out system messages
+            if (msg.message && (
+                msg.message.includes('[MODE CHANGE]') ||
+                msg.message.includes('Previous holder') ||
+                msg.message.includes('summary:')
+            )) {
+                return; // Skip these messages
+            }
             
-            // Simple approach: deduplicate by message ID only
-            const messageMap = new Map();
-            const broadcastSignatures = new Set();
+            const isBroadcast = msg.to === 'BROADCAST' || 
+                msg.to === 'broadcast' || 
+                (msg.message && msg.message.includes('[BROADCAST')) ||
+                (msg.message && msg.message.toLowerCase().includes('broadcast'));
             
-            allCombinedMessages.forEach(msg => {
-                // Filter out system messages
-                if (msg.message && (
-                    msg.message.includes('[MODE CHANGE]') ||
-                    msg.message.includes('Previous holder') ||
-                    msg.message.includes('summary:')
-                )) {
-                    return; // Skip these messages
-                }
+            if (isBroadcast) {
+                // Create signature based on sender, message content (without timestamps in content)
+                const messageText = msg.message.replace(/\[\d{2}:\d{2}\s*PM\]/g, '').trim();
+                const signature = `${msg.from}:${messageText}`;
                 
-                const isBroadcast = msg.to === 'BROADCAST' || 
-                    msg.to === 'broadcast' || 
-                    (msg.message && msg.message.includes('[BROADCAST')) ||
-                    (msg.message && msg.message.toLowerCase().includes('broadcast'));
-                
-                if (isBroadcast) {
-                    // Create signature based on sender, message content (without timestamps in content)
-                    const messageText = msg.message.replace(/\[\d{2}:\d{2}\s*PM\]/g, '').trim();
-                    const signature = `${msg.from}:${messageText}`;
-                    
-                    if (!broadcastSignatures.has(signature)) {
-                        broadcastSignatures.add(signature);
-                        messageMap.set(msg.id, {
-                            ...msg,
-                            isBroadcast: true
-                        });
-                    }
-                } else {
-                    // Regular messages - always include
+                if (!broadcastSignatures.has(signature)) {
+                    broadcastSignatures.add(signature);
                     messageMap.set(msg.id, {
                         ...msg,
-                        isBroadcast: false
+                        isBroadcast: true
                     });
                 }
-            });
+            } else {
+                // Regular messages - always include
+                messageMap.set(msg.id, {
+                    ...msg,
+                    isBroadcast: false
+                });
+            }
+        });
+        
+        const processedMessages = Array.from(messageMap.values());
+        
+        // NOW check for new messages against our current state
+        const previousMessageIds = new Set(state.allMessages.map(msg => msg.id));
+        
+        let latestNewMessageAgent = null;
+        let newMessageCount = 0;
+        let hasNewMessages = false;
+        
+        processedMessages.forEach(msg => {
+            if (!previousMessageIds.has(msg.id)) {
+                hasNewMessages = true;
+                newMessageCount++;
+                // Track the latest message sender
+                if (msg.from) {
+                    latestNewMessageAgent = msg.from;
+                }
+            }
+        });
+        
+        
+        // Update the latest message agent if we found new messages
+        // Skip animation on first poll (page load)
+        if (latestNewMessageAgent && !state.isFirstPoll) {
+            // Clear any existing timeout
+            if (state.glowTimeout) {
+                clearTimeout(state.glowTimeout);
+                state.glowTimeout = null;
+            }
             
-            state.allMessages = Array.from(messageMap.values());
+            // Update both states
+            state.latestMessageAgent = latestNewMessageAgent;
+            state.speakingAgent = latestNewMessageAgent;
+            renderAgentList(); // Update UI immediately to show animations
+            
+            // Set maximum glow duration of 10 seconds
+            state.glowTimeout = setTimeout(() => {
+                // Clear both states to stop all animations
+                state.latestMessageAgent = null;
+                state.speakingAgent = null;
+                renderAgentList();
+            }, 10000); // 10 second maximum
+        }
+        
+        // Clear first poll flag after first run
+        if (state.isFirstPoll) {
+            state.isFirstPoll = false;
+        }
+        
+        // Always update state with processed messages
+        state.allMessages = processedMessages;
+        
+        if (hasNewMessages || state.isFirstPoll) {
             
             // Rebuild per-agent message arrays
             state.messages = {};
@@ -585,99 +609,17 @@ async function pollMessages() {
             
             updateStats();
             renderChatView();
-            
         }
     } catch (error) {
         // Silent fail for polling
     }
 }
 
-// OLD CODE BELOW - DELETE THIS
-async function pollMessagesOLD() {
-    if (state.agents.length === 0) return;
-    
-    let hasNewMessages = false;
-    
-    for (const agent of state.agents) {
-        try {
-            const messages = await callMcp('tools/call', {
-                name: 'check-for-messages',
-                arguments: { agent_id: agent.id }
-            });
-            
-            if (Array.isArray(messages) && messages.length > 0) {
-                log(`Found ${messages.length} messages for ${agent.name}`, 'info');
-                messages.forEach(msg => {
-                    // Skip if already processed
-                    const messageKey = `${msg.id}-${agent.id}`;
-                    if (state.processedMessageIds.has(messageKey)) return;
-                    state.processedMessageIds.add(messageKey);
-                    
-                    // Initialize message array for agent if needed
-                    if (!state.messages[agent.id]) {
-                        state.messages[agent.id] = [];
-                    }
-                    
-                    // Determine if broadcast
-                    const isBroadcast = msg.isBroadcast || 
-                        (msg.message && msg.message.includes('[BROADCAST'));
-                    
-                    // Add to all messages array
-                    state.allMessages.push({ ...msg, isBroadcast });
-                    
-                    if (isBroadcast) {
-                        // Add broadcast to all agents
-                        state.agents.forEach(a => {
-                            if (!state.messages[a.id]) {
-                                state.messages[a.id] = [];
-                            }
-                            state.messages[a.id].push({ ...msg, isBroadcast: true });
-                        });
-                    } else {
-                        // Add to recipient's messages
-                        state.messages[agent.id].push(msg);
-                        
-                        // Also add to sender's messages if different
-                        if (msg.from !== agent.id && msg.from) {
-                            if (!state.messages[msg.from]) {
-                                state.messages[msg.from] = [];
-                            }
-                            state.messages[msg.from].push(msg);
-                        }
-                    }
-                    
-                    hasNewMessages = true;
-                });
-            }
-        } catch (error) {
-            // Silent fail for polling
-        }
-    }
-    
-    // Sort all messages by timestamp
-    state.allMessages.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
-    
-    // Update UI if there are new messages
-    if (hasNewMessages) {
-        updateStats();
-        renderChatView();
-    }
-    
-    // Clean up old message IDs
-    if (state.processedMessageIds.size > 1000) {
-        const oldKeys = Array.from(state.processedMessageIds).slice(0, 200);
-        oldKeys.forEach(key => state.processedMessageIds.delete(key));
-    }
-}
 
 // Update statistics
 function updateStats() {
     elements.totalAgents.textContent = state.agents.length;
-    
-    // Count unique messages from allMessages array
     elements.totalMessages.textContent = state.allMessages.length;
-    
-    // Count broadcasts
     const totalBroadcasts = state.allMessages.filter(msg => msg.isBroadcast).length;
     elements.totalBroadcasts.textContent = totalBroadcasts;
 }
@@ -685,6 +627,12 @@ function updateStats() {
 // Event Listeners
 elements.refreshButton.addEventListener('click', () => {
     refreshAgents();
+});
+
+// Order toggle
+elements.reverseOrderToggle.addEventListener('change', () => {
+    state.reverseOrder = elements.reverseOrderToggle.checked;
+    renderChatView();
 });
 
 // Panel collapse functionality
@@ -698,26 +646,6 @@ elements.showPanelButton.addEventListener('click', () => {
     elements.showPanelButton.style.display = 'none';
 });
 
-// Hide broadcasts toggle
-elements.hideBroadcastsToggle.addEventListener('change', () => {
-    state.hideBroadcasts = elements.hideBroadcastsToggle.checked;
-    renderChatView();
-    log(`Broadcasts: ${state.hideBroadcasts ? 'hidden' : 'shown'}`, 'info');
-});
-
-// UX improvement toggles
-elements.reverseOrderToggle.addEventListener('change', () => {
-    state.reverseOrder = elements.reverseOrderToggle.checked;
-    renderChatView();
-    log(`Message order: ${state.reverseOrder ? 'newest first' : 'oldest first'}`, 'info');
-});
-
-// Auto-scroll toggle
-elements.autoScrollToggle.addEventListener('change', () => {
-    state.autoScroll = elements.autoScrollToggle.checked;
-    log(`Auto-scroll: ${state.autoScroll ? 'enabled' : 'disabled'}`, 'info');
-});
-
 // Show only new toggle
 elements.showOnlyNewToggle.addEventListener('change', () => {
     state.showOnlyNew = elements.showOnlyNewToggle.checked;
@@ -726,41 +654,40 @@ elements.showOnlyNewToggle.addEventListener('change', () => {
         state.lastSeenTimestamp = new Date().toISOString();
     }
     renderChatView();
-    log(`Toggled to show ${state.showOnlyNew ? 'only new' : 'all'} messages`, 'info');
 });
 
-// Mark all read button
-elements.markAllReadButton.addEventListener('click', () => {
-    state.lastSeenTimestamp = new Date().toISOString();
-    if (state.showOnlyNew) {
-        renderChatView();
-    }
-    log('Marked all messages as read', 'info');
-});
-
-// Cleanup button
-elements.cleanupButton.addEventListener('click', async () => {
-    if (confirm('Delete all messages older than 24 hours?')) {
+// Delete ALL messages button - SWOOSH!
+elements.deleteAllButton.addEventListener('click', async () => {
+    if (confirm('Delete ALL messages? This cannot be undone!')) {
         try {
-            elements.cleanupButton.disabled = true;
-            elements.cleanupButton.innerHTML = '⏳';
+            elements.deleteAllButton.disabled = true;
+            elements.deleteAllButton.innerHTML = '⏳ Deleting...';
             
-            const response = await fetch('http://127.0.0.1:3113/monitor/cleanup?olderThanHours=24', {
+            // Delete ALL messages, not just old ones
+            const response = await fetch('http://127.0.0.1:3113/monitor/cleanup?olderThanHours=0', {
                 method: 'DELETE'
             });
             const result = await response.json();
             
             if (result.success) {
-                log(`Deleted ${result.deletedCount} old messages`, 'success');
-                await pollMessages();
+                // Clear local state immediately
+                state.allMessages = [];
+                state.messages = {};
+                state.processedMessageIds.clear();
+                
+                // Update UI immediately
+                renderChatView();
+                updateStats();
+                
+                // Success
             } else {
-                log('Failed to cleanup messages', 'error');
+                // Failed
             }
         } catch (error) {
-            log('Error during cleanup: ' + error.message, 'error');
+            // Silent fail
         } finally {
-            elements.cleanupButton.disabled = false;
-            elements.cleanupButton.innerHTML = '🗑️ Clean old';
+            elements.deleteAllButton.disabled = false;
+            elements.deleteAllButton.innerHTML = '🗑️ Delete All Messages';
         }
     }
 });
@@ -776,11 +703,26 @@ setInterval(() => {
 
 // Initialize
 async function init() {
-    log('Starting MCP Agent Monitor...', 'info');
+    
+    // Set initial toggle states to match defaults
+    elements.reverseOrderToggle.checked = state.reverseOrder;
+    elements.showOnlyNewToggle.checked = state.showOnlyNew;
+    
+    // Clear glow when clicking anywhere in chat view
+    elements.chatView.addEventListener('click', () => {
+        if (state.latestMessageAgent || state.speakingAgent) {
+            state.latestMessageAgent = null;
+            state.speakingAgent = null;
+            if (state.glowTimeout) {
+                clearTimeout(state.glowTimeout);
+                state.glowTimeout = null;
+            }
+            renderAgentList();
+        }
+    });
     
     const initialized = await initializeMcp();
     if (!initialized) {
-        log('Could not connect to MCP server at ' + MCP_SERVER_URL, 'error');
         updateConnectionStatus(false);
         return;
     }
@@ -795,8 +737,15 @@ async function init() {
     // Start polling for messages
     state.pollingInterval = setInterval(async () => {
         await pollMessages();
-                renderAgentList(); // Re-render to update agent list
+        // Only refresh agents every 10 seconds, not every poll
     }, 1500); // Poll every 1.5 seconds
+    
+    // Separate interval for agent refresh
+    setInterval(async () => {
+        if (!document.hidden) {
+            await refreshAgents();
+        }
+    }, 10000); // Refresh agents every 10 seconds
 }
 
 // Start the application
@@ -816,7 +765,9 @@ document.addEventListener('visibilitychange', () => {
         state.pollingInterval = null;
         log('Paused polling (tab hidden)', 'info');
     } else if (!document.hidden && !state.pollingInterval) {
-        state.pollingInterval = setInterval(pollMessages, 1500);
+        state.pollingInterval = setInterval(async () => {
+            await pollMessages();
+        }, 1500);
         log('Resumed polling (tab visible)', 'info');
         refreshAgents();
     }

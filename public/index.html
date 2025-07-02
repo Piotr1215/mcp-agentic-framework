@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>MCP Agent Monitor</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="style.css" />
+    <link rel="stylesheet" href="style.css?v=2" />
 </head>
 <body>
     <div class="app-container">
@@ -15,44 +15,24 @@
             <div class="header-controls">
                 <div class="control-group">
                     <label class="control-item toggle-compact">
-                        <input type="checkbox" id="autoScrollToggle">
-                        <span class="toggle-label">Auto-scroll</span>
-                    </label>
-                    <label class="control-item toggle-compact">
                         <input type="checkbox" id="reverseOrderToggle">
                         <span class="toggle-label">Newest first</span>
                     </label>
-                </div>
-                
-                <div class="control-divider"></div>
-                
-                <div class="control-group">
                     <label class="control-item toggle-compact">
                         <input type="checkbox" id="showOnlyNewToggle">
                         <span class="toggle-label">Show only new</span>
                     </label>
-                    <label class="control-item toggle-compact">
-                        <input type="checkbox" id="hideBroadcastsToggle">
-                        <span class="toggle-label">Hide broadcasts</span>
-                    </label>
                 </div>
                 
                 <div class="control-divider"></div>
                 
                 <div class="control-group">
-                    <button id="markAllReadButton" class="control-button">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M9 11l3 3L22 4"></path>
-                            <path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"></path>
-                        </svg>
-                        <span>Mark all read</span>
-                    </button>
-                    <button id="cleanupButton" class="control-button danger">
+                    <button id="deleteAllButton" class="control-button danger">
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <polyline points="3 6 5 6 21 6"></polyline>
                             <path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"></path>
                         </svg>
-                        <span>Clean old</span>
+                        <span>Delete All</span>
                     </button>
                     <button id="showPanelButton" class="control-button" style="display: none;" title="Show Stats">
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -113,12 +93,6 @@
                         <span class="stat-value" id="totalBroadcasts">0</span>
                     </div>
                 </div>
-                
-                <div class="panel-header" style="margin-top: 2rem;">
-                    <h2>System Log</h2>
-                    <button id="logCollapseButton" class="icon-button" title="Collapse">⌄</button>
-                </div>
-                <pre id="systemLog" class="system-log"></pre>
             </aside>
         </main>
     </div>

@@ -499,6 +499,40 @@ body {
   flex-shrink: 0;
 }
 
+/* Pulsing glow animation for speaking agents */
+@keyframes speakingPulse {
+  0% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.7);
+  }
+  50% {
+    transform: scale(1.05);
+    box-shadow: 0 0 0 10px rgba(59, 130, 246, 0);
+  }
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(59, 130, 246, 0);
+  }
+}
+
+.agent-item.speaking {
+  background: rgba(59, 130, 246, 0.1) !important;
+  border: 2px solid var(--primary) !important;
+  transform: scale(1.05) !important;
+}
+
+.agent-item.speaking .agent-avatar {
+  animation: speakingPulse 1.5s ease-out infinite !important;
+  background: var(--primary) !important;
+  color: white !important;
+}
+
+/* Ensure speaking overrides active state */
+.agent-item.active.speaking {
+  background: rgba(59, 130, 246, 0.2) !important;
+  transform: scale(1.05) !important;
+}
+
 .agent-item.active .agent-avatar {
   background: rgba(255, 255, 255, 0.2);
 }
@@ -913,6 +947,10 @@ body {
 }
 
 /* Loading animation */
+@keyframes loadingSpin {
+  to { transform: rotate(360deg); }
+}
+
 .loading {
   display: inline-block;
   width: 16px;
@@ -920,12 +958,9 @@ body {
   border: 2px solid var(--border);
   border-top-color: var(--primary);
   border-radius: 50%;
-  animation: spin 0.8s linear infinite;
+  animation: loadingSpin 0.8s linear infinite;
 }
 
-@keyframes spin {
-  to { transform: rotate(360deg); }
-}
 
 /* Date divider */
 .date-divider {
