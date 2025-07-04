@@ -15,10 +15,6 @@
             <div class="header-controls">
                 <div class="control-group">
                     <label class="control-item toggle-compact">
-                        <input type="checkbox" id="reverseOrderToggle">
-                        <span class="toggle-label">Newest first</span>
-                    </label>
-                    <label class="control-item toggle-compact">
                         <input type="checkbox" id="showOnlyNewToggle">
                         <span class="toggle-label">Show only new</span>
                     </label>
@@ -71,6 +67,25 @@
                         <p class="muted">Agents are controlled via Claude CLI</p>
                     </div>
                 </div>
+                <!-- Page Navigation -->
+                <div id="pageNavigation" class="page-navigation" style="display: none;">
+                    <button id="prevPageButton" class="page-button" disabled title="Previous (←)">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="15 18 9 12 15 6"></polyline>
+                        </svg>
+                        Previous
+                    </button>
+                    <div class="page-info">
+                        Message <input type="number" id="pageInput" class="page-input" value="1" min="1"> / <span id="totalPages">1</span>
+                    </div>
+                    <button id="nextPageButton" class="page-button" title="Next (→)">
+                        Next
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="9 18 15 12 9 6"></polyline>
+                        </svg>
+                    </button>
+                </div>
+                <!-- Removed new messages indicator - just use page nav -->
             </section>
             
             <!-- Conversation Stats -->

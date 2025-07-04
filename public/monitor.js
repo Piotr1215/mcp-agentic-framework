@@ -11,13 +11,18 @@ const state = {
     processedMessageIds: new Set(),
     pollingInterval: null,
     isConnected: false,
-    reverseOrder: true, // Show newest first by default - new messages at top!
+    reverseOrder: true, // Always show newest first - only behavior now
     showOnlyNew: false,
     lastSeenTimestamp: null,
     latestMessageAgent: null, // Track only the most recent message sender
     speakingAgent: null, // For spin animation
     glowTimeout: null, // Timeout for clearing glow
     isFirstPoll: true, // Track first poll to prevent initial animations
+    newMessagesCount: 0, // Track unread messages
+    lastReadMessageId: null, // Track last message user has seen
+    currentPage: 1, // Current page number
+    messagesPerPage: 1, // ONE message per page - no exceptions!
+    newMessagePage: null, // Page where new messages are
 };
 
 // DOM Elements
@@ -27,7 +32,6 @@ const elements = {
     agentList: document.getElementById('agentList'),
     chatView: document.getElementById('chatView'),
     refreshButton: document.getElementById('refreshButton'),
-    reverseOrderToggle: document.getElementById('reverseOrderToggle'),
     showOnlyNewToggle: document.getElementById('showOnlyNewToggle'),
     deleteAllButton: document.getElementById('deleteAllButton'),
     totalAgents: document.getElementById('totalAgents'),
@@ -35,7 +39,13 @@ const elements = {
     totalBroadcasts: document.getElementById('totalBroadcasts'),
     panelCollapseButton: document.getElementById('panelCollapseButton'),
     statsPanel: document.getElementById('statsPanel'),
-    showPanelButton: document.getElementById('showPanelButton')
+    showPanelButton: document.getElementById('showPanelButton'),
+    pageNavigation: document.getElementById('pageNavigation'),
+    prevPageButton: document.getElementById('prevPageButton'),
+    nextPageButton: document.getElementById('nextPageButton'),
+    currentPage: document.getElementById('currentPage'),
+    totalPages: document.getElementById('totalPages'),
+    pageInput: document.getElementById('pageInput')
 };
 
 // Fun emojis for agents
@@ -313,12 +323,15 @@ function selectAgent(agentId) {
         state.latestMessageAgent = null;
     }
     
+    // Reset to page 1 when changing filter
+    state.currentPage = 1;
+    
     renderAgentList();
     renderChatView();
     
 }
 
-// Render chat view
+// Render chat view with pagination
 function renderChatView() {
     let messages;
     let headerHtml = '';
@@ -338,30 +351,13 @@ function renderChatView() {
             
             return false;
         });
-        headerHtml = `
-            <div class="chat-header">
-                <div class="agent-avatar">${generateAvatar(agent.name, agent.id)}</div>
-                <div class="chat-header-info">
-                    <h3>${escapeHtml(agent.name)}'s Messages</h3>
-                    <div class="chat-header-meta">
-                        Filtering to show only ${escapeHtml(agent.name)}'s conversations
-                    </div>
-                </div>
-            </div>
-        `;
+        // No header - maximum space for messages
+        headerHtml = '';
     } else {
         // Show all messages (already deduplicated)
         messages = state.allMessages;
-        headerHtml = `
-            <div class="chat-header">
-                <div class="chat-header-info">
-                    <h3>All Agent Conversations</h3>
-                    <div class="chat-header-meta">
-                        Showing all messages from ${state.agents.length} agents
-                    </div>
-                </div>
-            </div>
-        `;
+        // No header - maximum space for messages
+        headerHtml = '';
     }
     
     let html = headerHtml + '<div class="messages-container">';
@@ -374,47 +370,47 @@ function renderChatView() {
         );
     }
     
-    if (displayMessages.length === 0) {
+    // Sort messages based on order preference
+    if (displayMessages.length > 0) {
+        if (state.reverseOrder) {
+            displayMessages.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+        } else {
+            displayMessages.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+        }
+    }
+    
+    // Calculate pagination
+    const totalMessages = displayMessages.length;
+    const totalPages = Math.max(1, Math.ceil(totalMessages / state.messagesPerPage));
+    
+    // Ensure current page is valid
+    if (state.currentPage > totalPages) {
+        state.currentPage = totalPages;
+    }
+    
+    // Get messages for current page
+    const startIndex = (state.currentPage - 1) * state.messagesPerPage;
+    const endIndex = startIndex + state.messagesPerPage;
+    const pageMessages = displayMessages.slice(startIndex, endIndex);
+    
+    if (totalMessages === 0) {
         html += `
             <div class="empty-state">
                 <p>${state.showOnlyNew ? 'No new messages' : 'No messages yet'}</p>
                 <p class="muted">${state.showOnlyNew ? 'New messages will appear here' : 'Messages will appear here when agents communicate'}</p>
             </div>
         `;
+        elements.pageNavigation.style.display = 'none';
     } else {
+        // Show page navigation
+        elements.pageNavigation.style.display = 'flex';
+        elements.pageInput.value = state.currentPage;
+        elements.pageInput.max = totalPages;
+        elements.totalPages.textContent = totalPages;
+        elements.prevPageButton.disabled = state.currentPage === 1;
+        elements.nextPageButton.disabled = state.currentPage === totalPages;
         
-        // Sort messages based on order preference
-        if (state.reverseOrder) {
-            displayMessages.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-        } else {
-            displayMessages.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
-        }
-        
-        let lastDate = null;
-        
-        displayMessages.forEach((msg, index) => {
-            const msgDate = new Date(msg.timestamp).toDateString();
-            
-            // Add date divider if needed - adjust logic for reverse order
-            const shouldShowDate = state.reverseOrder ? 
-                (index === 0 || new Date(displayMessages[index - 1].timestamp).toDateString() !== msgDate) :
-                (lastDate !== msgDate);
-                
-            if (shouldShowDate) {
-                html += `
-                    <div class="date-divider">
-                        <span>${new Date(msg.timestamp).toLocaleDateString([], { 
-                            weekday: 'long', 
-                            year: 'numeric', 
-                            month: 'long', 
-                            day: 'numeric' 
-                        })}</span>
-                    </div>
-                `;
-                lastDate = msgDate;
-                lastSenderId = null; // Reset sender tracking on new date
-            }
-            
+        pageMessages.forEach((msg, index) => {
             const senderAgent = state.agents.find(a => a.id === msg.from);
             const recipientAgent = state.agents.find(a => a.id === msg.to);
             const senderName = senderAgent?.name || 'Unknown';
@@ -422,6 +418,14 @@ function renderChatView() {
             const senderAvatar = generateAvatar(senderName, msg.from);
             
             const isSent = state.selectedAgentId && msg.from === state.selectedAgentId;
+            
+            // Include full date in timestamp since showing one message
+            const fullDate = new Date(msg.timestamp).toLocaleDateString([], { 
+                weekday: 'long', 
+                year: 'numeric', 
+                month: 'long', 
+                day: 'numeric' 
+            });
             
             html += `
                 <div class="message ${isSent ? 'sent' : ''} ${msg.isBroadcast ? 'broadcast' : ''}">
@@ -433,7 +437,7 @@ function renderChatView() {
                             ${!msg.isBroadcast && msg.to ? ` → ${escapeHtml(recipientName)}` : ''}
                         </div>
                         <div class="message-text">${formatMessage(msg.message)}</div>
-                        <div class="message-time">${formatTime(msg.timestamp)}</div>
+                        <div class="message-time">${fullDate} • ${formatTime(msg.timestamp)}</div>
                     </div>
                 </div>
             `;
@@ -442,29 +446,7 @@ function renderChatView() {
     
     html += '</div>';
     
-    // Save scroll position before updating
-    const scrollTop = elements.chatView.scrollTop;
-    const scrollHeight = elements.chatView.scrollHeight;
-    
     elements.chatView.innerHTML = html;
-    
-    // ALWAYS maintain exact scroll position - no jumping!
-    setTimeout(() => {
-        elements.chatView.scrollTop = scrollTop;
-    }, 0);
-    
-    // Clear the glow if we're showing all messages (user is seeing everything)
-    // DISABLED: This was clearing animations immediately
-    // if (!state.selectedAgentId && (state.latestMessageAgent || state.speakingAgent)) {
-    //     // User is viewing all messages, so they've seen the latest
-    //     state.latestMessageAgent = null;
-    //     state.speakingAgent = null;
-    //     if (state.glowTimeout) {
-    //         clearTimeout(state.glowTimeout);
-    //         state.glowTimeout = null;
-    //     }
-    //     renderAgentList();
-    // }
 }
 
 // Removed speaking stick functionality
@@ -530,6 +512,7 @@ async function pollMessages() {
         
         // NOW check for new messages against our current state
         const previousMessageIds = new Set(state.allMessages.map(msg => msg.id));
+        const newMessages = [];
         
         let latestNewMessageAgent = null;
         let newMessageCount = 0;
@@ -539,6 +522,7 @@ async function pollMessages() {
             if (!previousMessageIds.has(msg.id)) {
                 hasNewMessages = true;
                 newMessageCount++;
+                newMessages.push(msg);
                 // Track the latest message sender
                 if (msg.from) {
                     latestNewMessageAgent = msg.from;
@@ -561,6 +545,15 @@ async function pollMessages() {
             state.speakingAgent = latestNewMessageAgent;
             renderAgentList(); // Update UI immediately to show animations
             
+            // Update new messages count
+            state.newMessagesCount += newMessageCount;
+            
+            // If in reverse order (newest first), increment current page
+            // so user stays on same message but page number increases
+            if (state.reverseOrder && hasNewMessages && !state.isFirstPoll) {
+                state.currentPage += newMessageCount;
+            }
+            
             // Set maximum glow duration of 10 seconds
             state.glowTimeout = setTimeout(() => {
                 // Clear both states to stop all animations
@@ -579,7 +572,6 @@ async function pollMessages() {
         state.allMessages = processedMessages;
         
         if (hasNewMessages || state.isFirstPoll) {
-            
             // Rebuild per-agent message arrays
             state.messages = {};
             state.agents.forEach(agent => {
@@ -608,7 +600,31 @@ async function pollMessages() {
             });
             
             updateStats();
-            renderChatView();
+            
+            // Calculate which page the new messages are on
+            if (hasNewMessages && !state.isFirstPoll) {
+                // Find page number for newest message
+                const totalMessages = state.allMessages.length;
+                const totalPages = Math.ceil(totalMessages / state.messagesPerPage);
+                
+                if (state.reverseOrder) {
+                    // Newest first - new messages are on page 1
+                    state.newMessagePage = 1;
+                } else {
+                    // Oldest first - new messages are on last page
+                    state.newMessagePage = totalPages;
+                }
+                
+            }
+            
+            // Render on first poll or if we have no rendered content yet (after refresh)
+            if (state.isFirstPoll || elements.chatView.querySelector('.empty-state')) {
+                renderChatView();
+            } else if (hasNewMessages) {
+                // New messages arrived - ONLY update navigation, never change view
+                updatePageNavigation();
+                blinkPageCounter();
+            }
         }
     } catch (error) {
         // Silent fail for polling
@@ -624,16 +640,81 @@ function updateStats() {
     elements.totalBroadcasts.textContent = totalBroadcasts;
 }
 
+// Blink page counter when new messages arrive
+function blinkPageCounter() {
+    elements.pageInput.classList.add('blink');
+    setTimeout(() => {
+        elements.pageInput.classList.remove('blink');
+    }, 1000);
+}
+
+// Mark messages as read when user scrolls or clicks
+function markMessagesAsRead() {
+    state.newMessagesCount = 0;
+    updateNewMessagesIndicator();
+    
+    // Track the last message ID as read
+    if (state.allMessages.length > 0) {
+        state.lastReadMessageId = state.allMessages[state.allMessages.length - 1].id;
+    }
+}
+
+// Update only page navigation without re-rendering content
+function updatePageNavigation() {
+    // Get current messages to calculate pages
+    let messages = state.allMessages;
+    if (state.selectedAgentId) {
+        messages = state.allMessages.filter(msg => {
+            return msg.from === state.selectedAgentId || msg.to === state.selectedAgentId;
+        });
+    }
+    
+    // Filter if showing only new
+    if (state.showOnlyNew && state.lastSeenTimestamp) {
+        messages = messages.filter(msg => 
+            new Date(msg.timestamp) > new Date(state.lastSeenTimestamp)
+        );
+    }
+    
+    const totalMessages = messages.length;
+    const totalPages = Math.max(1, Math.ceil(totalMessages / state.messagesPerPage));
+    
+    // Update navigation elements
+    if (totalMessages > 0 && elements.pageNavigation.style.display !== 'none') {
+        elements.pageInput.value = state.currentPage; // Update the input value
+        elements.pageInput.max = totalPages;
+        elements.totalPages.textContent = totalPages;
+        elements.prevPageButton.disabled = state.currentPage === 1;
+        elements.nextPageButton.disabled = state.currentPage === totalPages;
+    }
+}
+
+// Page navigation functions
+function goToPage(pageNumber) {
+    state.currentPage = pageNumber;
+    renderChatView();
+    markMessagesAsRead();
+}
+
+function nextPage() {
+    const totalMessages = state.allMessages.length;
+    const totalPages = Math.ceil(totalMessages / state.messagesPerPage);
+    if (state.currentPage < totalPages) {
+        goToPage(state.currentPage + 1);
+    }
+}
+
+function prevPage() {
+    if (state.currentPage > 1) {
+        goToPage(state.currentPage - 1);
+    }
+}
+
 // Event Listeners
 elements.refreshButton.addEventListener('click', () => {
     refreshAgents();
 });
 
-// Order toggle
-elements.reverseOrderToggle.addEventListener('change', () => {
-    state.reverseOrder = elements.reverseOrderToggle.checked;
-    renderChatView();
-});
 
 // Panel collapse functionality
 elements.panelCollapseButton.addEventListener('click', () => {
@@ -674,6 +755,7 @@ elements.deleteAllButton.addEventListener('click', async () => {
                 state.allMessages = [];
                 state.messages = {};
                 state.processedMessageIds.clear();
+                state.currentPage = 1;
                 
                 // Update UI immediately
                 renderChatView();
@@ -692,6 +774,38 @@ elements.deleteAllButton.addEventListener('click', async () => {
     }
 });
 
+// Page navigation event listeners
+elements.prevPageButton.addEventListener('click', prevPage);
+elements.nextPageButton.addEventListener('click', nextPage);
+
+
+// Page input handler
+elements.pageInput.addEventListener('change', (e) => {
+    const page = parseInt(e.target.value);
+    const totalMessages = state.allMessages.length;
+    const totalPages = Math.ceil(totalMessages / state.messagesPerPage);
+    
+    if (page >= 1 && page <= totalPages) {
+        goToPage(page);
+    } else {
+        // Reset to current page if invalid
+        elements.pageInput.value = state.currentPage;
+    }
+});
+
+// Mouse wheel navigation on chat view
+elements.chatView.addEventListener('wheel', (e) => {
+    e.preventDefault(); // Prevent any default scrolling
+    
+    if (e.deltaY > 0) {
+        // Scrolled down - next page
+        nextPage();
+    } else if (e.deltaY < 0) {
+        // Scrolled up - previous page
+        prevPage();
+    }
+});
+
 
 
 // Auto-refresh every 30 seconds
@@ -705,7 +819,6 @@ setInterval(() => {
 async function init() {
     
     // Set initial toggle states to match defaults
-    elements.reverseOrderToggle.checked = state.reverseOrder;
     elements.showOnlyNewToggle.checked = state.showOnlyNew;
     
     // Clear glow when clicking anywhere in chat view
@@ -750,6 +863,29 @@ async function init() {
 
 // Start the application
 document.addEventListener('DOMContentLoaded', init);
+
+// Keyboard navigation
+document.addEventListener('keydown', (e) => {
+    // Don't interfere with input fields
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+    
+    switch(e.key) {
+        case 'ArrowLeft':
+            prevPage();
+            break;
+        case 'ArrowRight':
+            nextPage();
+            break;
+        case 'Home':
+            goToPage(1);
+            break;
+        case 'End':
+            const totalMessages = state.allMessages.length;
+            const totalPages = Math.ceil(totalMessages / state.messagesPerPage);
+            goToPage(totalPages);
+            break;
+    }
+});
 
 // Cleanup on page unload
 window.addEventListener('beforeunload', () => {
