@@ -9,7 +9,7 @@ describe('End-to-End Multi-Agent Communication', () => {
   beforeEach(async () => {
     // Clean up storage
     try {
-      await fs.rm('/tmp/mcp-agentic-framework', { recursive: true, force: true });
+      await fs.rm('/tmp/mcp-agentic-framework-test', { recursive: true, force: true });
     } catch (e) {
       // Directory might not exist
     }
@@ -20,7 +20,7 @@ describe('End-to-End Multi-Agent Communication', () => {
   afterEach(async () => {
     // Clean up storage
     try {
-      await fs.rm('/tmp/mcp-agentic-framework', { recursive: true, force: true });
+      await fs.rm('/tmp/mcp-agentic-framework-test', { recursive: true, force: true });
     } catch (e) {
       // Directory might not exist
     }

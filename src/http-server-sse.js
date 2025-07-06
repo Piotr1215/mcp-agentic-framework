@@ -184,12 +184,15 @@ app.get('/mcp', async (req, res) => {
   }, 30000);
   
   // Handle client disconnect
-  req.on('close', () => {
+  const handleClose = () => {
     console.log(`SSE connection closed for session: ${sessionId}`);
     sseConnection.connected = false;
     sseConnections.delete(sessionId);
     clearInterval(pingInterval);
-  });
+    // Clean up the listener
+    req.removeListener('close', handleClose);
+  };
+  req.on('close', handleClose);
 });
 
 // Endpoint to receive sampling responses from client

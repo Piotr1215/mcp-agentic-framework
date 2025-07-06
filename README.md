@@ -80,6 +80,20 @@ To use the HTTP transport:
 
 **Note**: The HTTP transport supports Server-Sent Events (SSE)
 
+### HTTP Endpoints
+
+When running with `npm run start:http`, the following endpoints are available:
+
+- **`/mcp`** - Main MCP endpoint for agent communication
+- **`/health`** - Health check endpoint that returns:
+  ```json
+  {
+    "status": "ok",
+    "name": "mcp-agentic-framework",
+    "version": "1.0.0"
+  }
+  ```
+
 ## Available Tools
 
 ### `register-agent`

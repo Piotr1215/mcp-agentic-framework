@@ -11,7 +11,7 @@ describe('Broadcast Feature', () => {
   beforeEach(async () => {
     // Clean up storage before each test
     try {
-      await fs.rm('/tmp/mcp-agentic-framework', { recursive: true, force: true });
+      await fs.rm('/tmp/mcp-agentic-framework-test', { recursive: true, force: true });
     } catch (e) {
       // Directory might not exist
     }
@@ -22,7 +22,7 @@ describe('Broadcast Feature', () => {
   afterEach(async () => {
     // Clean up storage after each test
     try {
-      await fs.rm('/tmp/mcp-agentic-framework', { recursive: true, force: true });
+      await fs.rm('/tmp/mcp-agentic-framework-test', { recursive: true, force: true });
     } catch (e) {
       // Directory might not exist
     }

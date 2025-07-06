@@ -40,6 +40,7 @@ const createSubscription = (agentId, events, callback) => ({
 // Main factory function
 export const createNotificationManager = (pushNotificationSender = null) => {
   const emitter = new EventEmitter();
+  emitter.setMaxListeners(0); // Unlimited listeners since we manage them properly
   const subscriptions = new Map(); // agentId -> subscription
   
   // Function to send push notifications
@@ -59,13 +60,17 @@ export const createNotificationManager = (pushNotificationSender = null) => {
       throw new Error('Callback function is required');
     }
 
-    const subscription = createSubscription(agentId, events, callback);
-    subscriptions.set(agentId, subscription);
+    // If agent already has subscription, unsubscribe first
+    if (subscriptions.has(agentId)) {
+      unsubscribe(agentId);
+    }
 
-    // Register event listeners
+    // Create listener functions that we can track
+    const listeners = new Map();
+    
     events.forEach(event => {
       const eventPattern = event.replace('*', '');
-      emitter.on(event, (notification) => {
+      const listener = (notification) => {
         // Check if this notification matches the subscription pattern
         if (event.includes('*')) {
           if (notification.method.startsWith(eventPattern)) {
@@ -74,8 +79,14 @@ export const createNotificationManager = (pushNotificationSender = null) => {
         } else if (notification.method === event) {
           callback(notification);
         }
-      });
+      };
+      listeners.set(event, listener);
+      emitter.on(event, listener);
     });
+
+    const subscription = createSubscription(agentId, events, callback);
+    subscription.listeners = listeners; // Store listeners for cleanup
+    subscriptions.set(agentId, subscription);
 
     return { success: true };
   };
@@ -91,30 +102,32 @@ export const createNotificationManager = (pushNotificationSender = null) => {
       return { success: false, message: 'No subscription found' };
     }
 
-    if (events) {
+    if (events && events.length > 0) {
       // Unsubscribe from specific events
-      const remainingEvents = subscription.events.filter(e => !events.includes(e));
-      if (remainingEvents.length === 0) {
+      events.forEach(event => {
+        const listener = subscription.listeners?.get(event);
+        if (listener) {
+          emitter.removeListener(event, listener);
+          subscription.listeners.delete(event);
+        }
+      });
+      
+      // Update subscription events
+      subscription.events = subscription.events.filter(e => !events.includes(e));
+      
+      if (subscription.events.length === 0) {
         // No events left, remove subscription entirely
         subscriptions.delete(agentId);
-      } else {
-        // Update subscription with remaining events
-        subscription.events = remainingEvents;
       }
     } else {
       // Unsubscribe from all events
+      if (subscription.listeners) {
+        subscription.listeners.forEach((listener, event) => {
+          emitter.removeListener(event, listener);
+        });
+      }
       subscriptions.delete(agentId);
     }
-
-    // Remove all listeners for this agent
-    emitter.removeAllListeners();
-    
-    // Re-register remaining subscriptions
-    subscriptions.forEach((sub) => {
-      sub.events.forEach(event => {
-        emitter.on(event, sub.callback);
-      });
-    });
 
     return { success: true };
   };
