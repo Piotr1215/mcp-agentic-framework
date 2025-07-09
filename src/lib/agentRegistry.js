@@ -17,7 +17,16 @@ const createAgent = (id, name, description, status = '👋 Just joined!') => ({
   description,
   status,
   registeredAt: new Date().toISOString(),
-  lastActivityAt: new Date().toISOString()
+  lastActivityAt: new Date().toISOString(),
+  statistics: {
+    messagesReceived: 0,
+    messagesSent: 0,
+    broadcastsSent: 0,
+    lastMessageAt: null,
+    totalActiveTime: 0,
+    firstActiveAt: new Date().toISOString()
+  },
+  relationships: {}  // { agentId: { messageCount, lastContact } }
 });
 
 const validateAgentName = (name) => {
@@ -240,6 +249,104 @@ export const createAgentRegistry = (storagePath, notificationManager = null) => 
       }));
   };
 
+  // Track message sent by an agent
+  const trackMessageSent = async (fromId, toId) => {
+    return withLock(async () => {
+      const agents = await loadAgents(storagePath);
+      
+      if (!agents[fromId]) {
+        return { success: false };
+      }
+      
+      // Update sender statistics
+      agents[fromId].statistics.messagesSent++;
+      agents[fromId].statistics.lastMessageAt = new Date().toISOString();
+      agents[fromId].lastActivityAt = new Date().toISOString();
+      
+      // Update sender relationships
+      if (!agents[fromId].relationships[toId]) {
+        agents[fromId].relationships[toId] = {
+          messageCount: 0,
+          lastContact: null
+        };
+      }
+      agents[fromId].relationships[toId].messageCount++;
+      agents[fromId].relationships[toId].lastContact = new Date().toISOString();
+      
+      // Update receiver statistics if they exist
+      if (agents[toId]) {
+        agents[toId].statistics.messagesReceived++;
+        agents[toId].lastActivityAt = new Date().toISOString();
+      }
+      
+      await saveAgents(storagePath, agents);
+      return { success: true };
+    });
+  };
+
+  // Track broadcast sent by an agent
+  const trackBroadcastSent = async (fromId, recipientCount) => {
+    return withLock(async () => {
+      const agents = await loadAgents(storagePath);
+      
+      if (!agents[fromId]) {
+        return { success: false };
+      }
+      
+      agents[fromId].statistics.broadcastsSent++;
+      agents[fromId].statistics.lastMessageAt = new Date().toISOString();
+      agents[fromId].lastActivityAt = new Date().toISOString();
+      
+      await saveAgents(storagePath, agents);
+      return { success: true };
+    });
+  };
+
+  // Get enriched agent profile with statistics
+  const getAgentProfile = async (id) => {
+    const agent = await getAgent(id);
+    if (!agent) {
+      return null;
+    }
+    
+    // Calculate uptime
+    const registeredAt = new Date(agent.registeredAt);
+    const now = new Date();
+    const uptimeMs = now - registeredAt;
+    const uptimeHours = Math.floor(uptimeMs / (1000 * 60 * 60));
+    const uptimeMinutes = Math.floor((uptimeMs % (1000 * 60 * 60)) / (1000 * 60));
+    
+    // Calculate capabilities from description
+    const capabilities = [];
+    const desc = agent.description.toLowerCase();
+    if (desc.includes('code') || desc.includes('review')) capabilities.push('code-review');
+    if (desc.includes('test')) capabilities.push('testing');
+    if (desc.includes('develop') || desc.includes('implement')) capabilities.push('development');
+    if (desc.includes('coordinate') || desc.includes('orchestrat')) capabilities.push('coordination');
+    if (desc.includes('monitor')) capabilities.push('monitoring');
+    
+    // Format relationships
+    const formattedRelationships = Object.entries(agent.relationships || {})
+      .map(([agentId, data]) => ({
+        agentId,
+        messageCount: data.messageCount,
+        lastContact: data.lastContact,
+        frequency: data.messageCount > 10 ? 'frequent' : data.messageCount > 3 ? 'regular' : 'occasional'
+      }))
+      .sort((a, b) => b.messageCount - a.messageCount);
+    
+    return {
+      ...agent,
+      capabilities,
+      statistics: {
+        ...agent.statistics,
+        uptime: uptimeHours > 0 ? `${uptimeHours}h ${uptimeMinutes}m` : `${uptimeMinutes}m`,
+        messagesPerHour: uptimeHours > 0 ? (agent.statistics.messagesSent / uptimeHours).toFixed(1) : 'N/A'
+      },
+      relationships: formattedRelationships
+    };
+  };
+
   return {
     registerAgent,
     unregisterAgent,
@@ -248,6 +355,9 @@ export const createAgentRegistry = (storagePath, notificationManager = null) => 
     updateAgentStatus,
     updateAgentActivity,
     getAgentsByStatus,
-    getAllAgents
+    getAllAgents,
+    trackMessageSent,
+    trackBroadcastSent,
+    getAgentProfile
   };
 };

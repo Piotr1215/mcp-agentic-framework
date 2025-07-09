@@ -4,6 +4,14 @@ import { createNotificationManager } from './lib/notificationManager.js';
 import { createInstanceTracker } from './lib/instanceTracker.js';
 import { Errors, MCPError } from './errors.js';
 import { textResponse, structuredResponse, createMetadata } from './response-formatter.js';
+import { 
+  addResourceLinks, 
+  createAgentProfileLink,
+  createConversationLink,
+  createWorkflowLink,
+  extractConversationPairs,
+  detectWorkflowReferences
+} from './lib/resourceLinks.js';
 import * as path from 'path';
 
 // Initialize storage paths
@@ -98,10 +106,19 @@ export async function discoverAgents() {
   
   try {
     const agents = await agentRegistry.discoverAgents();
-    const metadata = createMetadata(startTime, { 
-      tool: 'discover-agents',
-      agentCount: agents.length 
-    });
+    
+    // Create resource links for agent profiles
+    const resourceLinks = agents.map(agent => 
+      createAgentProfileLink(agent.id, agent.name)
+    );
+    
+    const metadata = addResourceLinks(
+      createMetadata(startTime, { 
+        tool: 'discover-agents',
+        agentCount: agents.length 
+      }),
+      resourceLinks
+    );
     
     let message;
     if (agents.length === 0) {
@@ -142,6 +159,10 @@ export async function sendMessage(to, from, message) {
     }
     
     const result = await messageStore.sendMessage(from, to, message);
+    
+    // Track the message activity
+    await agentRegistry.trackMessageSent(from, to);
+    
     const metadata = createMetadata(startTime, { 
       tool: 'send-message',
       messageId: result.messageId 
@@ -195,10 +216,18 @@ export async function checkForMessages(agentId) {
       await messageStore.markMessageAsRead(msg.id);
     }
     
-    const metadata = createMetadata(startTime, { 
-      tool: 'check-for-messages',
-      messageCount: formattedMessages.length 
-    });
+    // Extract conversation links from messages
+    const conversationLinks = extractConversationPairs(
+      messages.map(msg => ({ ...msg, to: agentId }))
+    );
+    
+    const metadata = addResourceLinks(
+      createMetadata(startTime, { 
+        tool: 'check-for-messages',
+        messageCount: formattedMessages.length 
+      }),
+      conversationLinks
+    );
     
     let message;
     if (formattedMessages.length === 0) {
@@ -335,11 +364,23 @@ export async function sendBroadcast(from, message, priority = 'normal') {
     
     // Pass agentRegistry to enable actual message delivery
     const result = await messageStore.sendBroadcast(from, message, priority, agentRegistry);
-    const metadata = createMetadata(startTime, { 
-      tool: 'send-broadcast',
-      priority,
-      recipientCount: result.recipientCount
-    });
+    
+    // Track the broadcast activity
+    if (result.success) {
+      await agentRegistry.trackBroadcastSent(from, result.recipientCount);
+    }
+    
+    // Detect workflow references in the message
+    const workflowLinks = detectWorkflowReferences(message);
+    
+    const metadata = addResourceLinks(
+      createMetadata(startTime, { 
+        tool: 'send-broadcast',
+        priority,
+        recipientCount: result.recipientCount
+      }),
+      workflowLinks
+    );
     
     // Check if broadcast was blocked
     if (!result.success && result.error) {

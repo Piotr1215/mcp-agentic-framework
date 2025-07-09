@@ -12,30 +12,193 @@ export const resourceDefinitions = [
 ];
 
 // Resource content handler
-export async function getResourceContent(uri) {
-  switch (uri) {
-    case 'guide://how-to-communicate': {
-      // Read the HOW_TO_COMMUNICATE.md file
-      const guidePath = path.join(process.cwd(), 'docs', 'HOW_TO_COMMUNICATE.md');
+export async function getResourceContent(uri, context = {}) {
+  // In test mode, use the test-specific directory
+  const defaultDir = process.env.NODE_ENV === 'test' 
+    ? `/tmp/mcp-agentic-framework-test-${process.pid}`
+    : '/tmp/mcp-agentic-framework';
+  let baseDir = context.baseDir || defaultDir;
+  
+  // Parse URI
+  const uriMatch = uri.match(/^(\w+):\/\/(.+)$/);
+  if (!uriMatch) {
+    throw new Error(`Invalid resource URI format: ${uri}`);
+  }
+  
+  const [, scheme, resourcePath] = uriMatch;
+  
+  switch (scheme) {
+    case 'guide': {
+      if (resourcePath === 'how-to-communicate') {
+        // Read the HOW_TO_COMMUNICATE.md file
+        const guidePath = path.join(process.cwd(), 'docs', 'HOW_TO_COMMUNICATE.md');
+        try {
+          const content = await fs.readFile(guidePath, 'utf-8');
+          return {
+            uri,
+            mimeType: 'text/markdown',
+            text: content
+          };
+        } catch (error) {
+          // If file doesn't exist in docs, return the embedded version
+          return {
+            uri,
+            mimeType: 'text/markdown',
+            text: EMBEDDED_GUIDE
+          };
+        }
+      }
+      break;
+    }
+    
+    case 'agent': {
+      // Parse agent profile URI: agent://agent-id/profile
+      const match = resourcePath.match(/^(.+)\/profile$/);
+      if (match) {
+        const agentId = match[1];
+        // Try the correct storage location
+        const agentsPath = path.join(baseDir, 'agents.json');
+        
+        try {
+          // In test mode, find the correct test directory
+          if (process.env.NODE_ENV === 'test') {
+            const tmpContents = await fs.readdir('/tmp');
+            const testDirs = tmpContents.filter(d => 
+              d.startsWith('mcp-agentic-framework-test-') && 
+              d.includes(process.pid.toString())
+            );
+            if (testDirs.length > 0) {
+              // Use the most recent one
+              testDirs.sort();
+              baseDir = path.join('/tmp', testDirs[testDirs.length - 1]);
+            }
+          }
+          
+          // Use the registry's getAgentProfile for dynamic data
+          const { createAgentRegistry } = await import('./lib/agentRegistry.js');
+          const registry = createAgentRegistry(
+            path.join(baseDir, 'agents.json')
+          );
+          
+          const profile = await registry.getAgentProfile(agentId);
+          
+          if (profile) {
+            return {
+              uri,
+              mimeType: 'application/json',
+              text: JSON.stringify(profile, null, 2)
+            };
+          }
+        } catch (error) {
+          // Agent not found or file error
+          console.error('Error fetching agent profile:', error.message);
+          console.error('BaseDir:', baseDir);
+          console.error('Agent ID:', agentId);
+        }
+      }
+      break;
+    }
+    
+    case 'conversation': {
+      // Parse conversation URI: conversation://agent1/agent2
+      const [agent1Id, agent2Id] = resourcePath.split('/');
+      
+      // In test mode, find the correct test directory
+      if (process.env.NODE_ENV === 'test') {
+        const tmpContents = await fs.readdir('/tmp');
+        const testDirs = tmpContents.filter(d => 
+          d.startsWith('mcp-agentic-framework-test-') && 
+          d.includes(process.pid.toString())
+        );
+        if (testDirs.length > 0) {
+          testDirs.sort();
+          baseDir = path.join('/tmp', testDirs[testDirs.length - 1]);
+        }
+      }
+      
+      const messagesDir = path.join(baseDir, 'messages');
+      
       try {
-        const content = await fs.readFile(guidePath, 'utf-8');
+        const messageFiles = await fs.readdir(messagesDir);
+        const messages = [];
+        
+        for (const file of messageFiles) {
+          if (file.endsWith('.json')) {
+            const content = await fs.readFile(path.join(messagesDir, file), 'utf-8');
+            const msg = JSON.parse(content);
+            
+            // Include messages between these two agents
+            if ((msg.from === agent1Id && msg.to === agent2Id) ||
+                (msg.from === agent2Id && msg.to === agent1Id)) {
+              messages.push(msg);
+            }
+          }
+        }
+        
+        // Sort by timestamp
+        messages.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+        
         return {
           uri,
-          mimeType: 'text/markdown',
-          text: content
+          mimeType: 'application/json',
+          text: JSON.stringify({
+            participants: [agent1Id, agent2Id],
+            messages
+          }, null, 2)
         };
       } catch (error) {
-        // If file doesn't exist in docs, return the embedded version
+        // Return empty conversation
         return {
           uri,
-          mimeType: 'text/markdown',
-          text: EMBEDDED_GUIDE
+          mimeType: 'application/json',
+          text: JSON.stringify({
+            participants: [agent1Id, agent2Id],
+            messages: []
+          }, null, 2)
         };
       }
     }
-    default:
-      throw new Error(`Resource not found: ${uri}`);
+    
+    case 'workflow': {
+      // Return workflow templates
+      const workflows = {
+        'code-review-process': {
+          title: 'Code Review Process',
+          description: 'Standard workflow for code review tasks',
+          steps: [
+            'Receive code review request',
+            'Analyze code for quality issues',
+            'Check for security vulnerabilities',
+            'Provide feedback and suggestions',
+            'Approve or request changes'
+          ]
+        },
+        'system-update': {
+          title: 'System Update Workflow',
+          description: 'Template for handling system updates',
+          steps: [
+            'Announce update to all agents',
+            'Coordinate agent downtime',
+            'Perform update',
+            'Verify system integrity',
+            'Resume normal operations'
+          ]
+        }
+      };
+      
+      const workflow = workflows[resourcePath];
+      if (workflow) {
+        return {
+          uri,
+          mimeType: 'text/markdown',
+          text: `# ${workflow.title}\n\n${workflow.description}\n\n## Steps:\n${workflow.steps.map((s, i) => `${i + 1}. ${s}`).join('\n')}`
+        };
+      }
+      break;
+    }
   }
+  
+  throw new Error(`Resource not found: ${uri}`);
 }
 
 // Embedded version of the guide in case file is not found
