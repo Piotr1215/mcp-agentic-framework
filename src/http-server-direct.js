@@ -16,10 +16,14 @@ import {
   unsubscribeFromNotifications,
   getPendingNotifications
 } from './tools.js';
+import { createAgentRegistry } from './lib/agentRegistry.js';
 import { Errors, MCPError } from './errors.js';
 
 // Increase max listeners to prevent warnings
 EventEmitter.defaultMaxListeners = 20;
+
+// Get agent registry instance
+const agentRegistry = createAgentRegistry();
 
 const app = express();
 const port = process.env.PORT || 3113;
@@ -556,6 +560,79 @@ app.get('/monitor/workflows', async (req, res) => {
   }
 });
 
+// External broadcast endpoint
+app.post('/external/broadcast', async (req, res) => {
+  try {
+    // Set CORS headers
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-API-Key');
+    
+    // Check API key authentication
+    const apiKey = req.headers['x-api-key'];
+    const expectedKey = process.env.MCP_EXTERNAL_API_KEY || 'test-key-123';
+    
+    if (apiKey !== expectedKey) {
+      res.status(401).json({
+        success: false,
+        error: 'Unauthorized: Invalid API key'
+      });
+      return;
+    }
+    
+    // Extract broadcast parameters
+    const { from, message, priority = 'normal' } = req.body;
+    
+    if (!from || !message) {
+      res.status(400).json({
+        success: false,
+        error: 'Missing required fields: from, message'
+      });
+      return;
+    }
+    
+    // For external broadcasts, we use the 'from' field directly without creating agents
+    // This prevents agent proliferation and keeps external systems separate
+    console.log(`External broadcast from: ${from}`);
+    
+    // Use a simplified broadcast mechanism for external systems
+    const { createMessageStore } = await import('./lib/messageStore.js');
+    const messageStore = createMessageStore('/tmp/mcp-agentic-framework/messages');
+    
+    // Get all active agents to deliver the broadcast
+    const agents = await discoverAgents();
+    const activeAgents = agents.structuredContent?.agents || [];
+    const recipientCount = activeAgents.length;
+    
+    // Format the broadcast message properly
+    const broadcastMessage = `[BROADCAST ${(priority || 'normal').toUpperCase()}] Broadcast to: all\nFrom: ${from}\n${message}`;
+    
+    // Manually send to each agent without using the full broadcast mechanism
+    for (const agent of activeAgents) {
+      await messageStore.sendMessage(from, agent.id, broadcastMessage);
+    }
+    
+    console.log(`External broadcast delivered to ${recipientCount} agents`);
+    
+    // Return the result
+    res.json({
+      success: true,
+      result: {
+        recipientCount: recipientCount,
+        priority: priority || 'normal',
+        message: `Broadcast sent from ${from} to ${recipientCount} agents with ${priority || 'normal'} priority`
+      }
+    });
+    
+  } catch (error) {
+    console.error('External broadcast error:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
 // Monitor endpoint - update workflow definitions
 app.put('/monitor/workflows', async (req, res) => {
   try {
@@ -647,11 +724,13 @@ app.get('/', (req, res) => {
   });
 });
 
-// Start server
-app.listen(port, '127.0.0.1', () => {
-  console.log(`MCP Agentic Framework HTTP server listening at http://127.0.0.1:${port}`);
-  console.log(`MCP endpoint: http://127.0.0.1:${port}/mcp`);
-  console.log(`Health check: http://127.0.0.1:${port}/health`);
-});
+// Only start server if this is the main module (not imported for tests)
+if (import.meta.url === `file://${process.argv[1]}`) {
+  app.listen(port, '127.0.0.1', () => {
+    console.log(`MCP Agentic Framework HTTP server listening at http://127.0.0.1:${port}`);
+    console.log(`MCP endpoint: http://127.0.0.1:${port}/mcp`);
+    console.log(`Health check: http://127.0.0.1:${port}/health`);
+  });
+}
 
 export default app;

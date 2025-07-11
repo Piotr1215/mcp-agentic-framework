@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { registerAgent, discoverAgents, checkForMessages, sendBroadcast, resetInstances } from '../src/tools.js';
+import { registerAgent, discoverAgents, checkForMessages, sendBroadcast, resetInstances, unregisterAgent } from '../src/tools.js';
 import { getResourceContent, getResourcesWithLinks } from '../src/resourceDefinitions.js';
 import * as fs from 'fs/promises';
 import * as path from 'path';
@@ -116,8 +116,23 @@ describe('Resource Link Tool Results', () => {
 
     // Workflow resource links have been replaced with hooks
     // This test is no longer applicable
-    it.skip('should retrieve workflow template resources', async () => {
+    it('should not retrieve workflow template resources (workflows removed)', async () => {
       // Workflows are now handled by hooks, not resource links
+      // Register a test agent first
+      const testResult = await registerAgent('workflow-test-agent', 'Test agent for workflow check');
+      const testAgentId = testResult.structuredContent.id;
+      
+      try {
+        // This test verifies that workflow resources are no longer part of the system
+        const result = await getResourceContent(`agent://${testAgentId}/profile`);
+        expect(result).toBeDefined();
+        
+        // Workflow resources no longer exist in the system
+        await expect(getResourceContent('workflow://code-review')).rejects.toThrow();
+      } finally {
+        // Cleanup
+        await unregisterAgent(testAgentId);
+      }
     });
 
     it('should handle resource not found errors', async () => {
