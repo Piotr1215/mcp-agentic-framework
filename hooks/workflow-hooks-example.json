@@ -1,0 +1,26 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "mcp__agentic-framework__send-message|mcp__agentic-framework__send-broadcast",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/path/to/mcp-agentic-framework/hooks/workflow-detection-hook.sh"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "mcp__agentic-framework__send-message|mcp__agentic-framework__send-broadcast",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo \"$(date): Message/broadcast sent with workflow detection\" >> ~/.mcp-workflow-log"
+          }
+        ]
+      }
+    ]
+  }
+}

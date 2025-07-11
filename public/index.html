@@ -6,112 +6,198 @@
     <title>MCP Agent Monitor</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="style.css?v=2" />
+    <style>
+        /* Simple tab navigation */
+        .tab-navigation {
+            display: flex;
+            gap: 10px;
+            padding: 10px;
+            background: #0d1117;
+            border-bottom: 1px solid #30363d;
+        }
+        
+        .tab-button {
+            padding: 8px 16px;
+            background: #161b22;
+            color: #8b949e;
+            border: 1px solid #30363d;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.2s;
+        }
+        
+        .tab-button:hover {
+            background: #21262d;
+            color: #f0f6fc;
+        }
+        
+        .tab-button.active {
+            background: #1f6feb;
+            color: white;
+            border-color: #1f6feb;
+        }
+        
+        .tab-content {
+            display: none;
+        }
+        
+        .tab-content.active {
+            display: block;
+        }
+        
+        #monitor-tab {
+            height: calc(100vh - 42px);
+        }
+        
+        #monitor-tab .app-container {
+            height: 100%;
+        }
+        
+        #workflow-tab {
+            height: calc(100vh - 42px);
+        }
+        
+        .tab-content iframe {
+            width: 100%;
+            height: 100%;
+            border: none;
+        }
+    </style>
 </head>
 <body>
-    <div class="app-container">
-        <!-- Header -->
-        <header class="app-header">
-            <h1>MCP Agent Monitor</h1>
-            <div class="header-controls">
-                <div class="control-group">
-                    <label class="control-item toggle-compact">
-                        <input type="checkbox" id="showOnlyNewToggle">
-                        <span class="toggle-label">Show only new</span>
-                    </label>
+    <!-- Simple Tab Navigation -->
+    <div class="tab-navigation">
+        <button class="tab-button active" data-tab="monitor">MCP Agent Monitor</button>
+        <button class="tab-button" data-tab="workflow">Workflow Editor</button>
+    </div>
+    
+    <!-- Original Monitor -->
+    <div id="monitor-tab" class="tab-content active">
+        <div class="app-container">
+            <!-- Header -->
+            <header class="app-header">
+                <h1>MCP Agent Monitor</h1>
+                <div class="header-controls">
+                    <div class="control-group">
+                        <label class="control-item toggle-compact">
+                            <input type="checkbox" id="showOnlyNewToggle">
+                            <span class="toggle-label">Show only new</span>
+                        </label>
+                    </div>
+                    
+                    <div class="control-divider"></div>
+                    
+                    <div class="control-group">
+                        <button id="deleteAllButton" class="control-button danger">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polyline points="3 6 5 6 21 6"></polyline>
+                                <path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"></path>
+                            </svg>
+                            <span>Delete All</span>
+                        </button>
+                        <button id="showPanelButton" class="control-button" style="display: none;" title="Show Stats">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M18 20V10"></path>
+                                <path d="M12 20V4"></path>
+                                <path d="M6 20v-6"></path>
+                            </svg>
+                        </button>
+                    </div>
                 </div>
-                
-                <div class="control-divider"></div>
-                
-                <div class="control-group">
-                    <button id="deleteAllButton" class="control-button danger">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <polyline points="3 6 5 6 21 6"></polyline>
-                            <path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"></path>
-                        </svg>
-                        <span>Delete All</span>
-                    </button>
-                    <button id="showPanelButton" class="control-button" style="display: none;" title="Show Stats">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M18 20V10"></path>
-                            <path d="M12 20V4"></path>
-                            <path d="M6 20v-6"></path>
-                        </svg>
-                    </button>
+                <div class="header-info">
+                    <span class="status-indicator" id="connectionStatus"></span>
+                    <span id="lastUpdate">Never</span>
                 </div>
-            </div>
-            <div class="header-info">
-                <span class="status-indicator" id="connectionStatus"></span>
-                <span id="lastUpdate">Never</span>
-            </div>
-        </header>
-        
-        <!-- Main Content -->
-        <main class="main-content">
-            <!-- Agent List -->
-            <aside class="agent-panel">
-                <div class="panel-header">
-                    <h2>Active Agents</h2>
-                    <button id="refreshButton" class="icon-button" title="Refresh">↻</button>
-                </div>
-                <div id="agentList" class="agent-list">
-                    <div class="loading-state">Loading agents...</div>
-                </div>
-            </aside>
+            </header>
             
-            <!-- Chat Display -->
-            <section class="chat-display">
-                <div id="chatView" class="chat-view">
-                    <div class="empty-state">
-                        <h3>MCP Agent Conversation Monitor</h3>
-                        <p>Select an agent to view their conversation history</p>
-                        <p class="muted">Agents are controlled via Claude CLI</p>
+            <!-- Main Content -->
+            <main class="main-content">
+                <!-- Agent List -->
+                <aside class="agent-panel">
+                    <div class="panel-header">
+                        <h2>Active Agents</h2>
+                        <button id="refreshButton" class="icon-button" title="Refresh">↻</button>
                     </div>
-                </div>
-                <!-- Page Navigation -->
-                <div id="pageNavigation" class="page-navigation" style="display: none;">
-                    <button id="prevPageButton" class="page-button" disabled title="Previous (←)">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <polyline points="15 18 9 12 15 6"></polyline>
-                        </svg>
-                        Previous
-                    </button>
-                    <div class="page-info">
-                        Message <input type="number" id="pageInput" class="page-input" value="1" min="1"> / <span id="totalPages">1</span>
+                    <div id="agentList" class="agent-list">
+                        <div class="loading-state">Loading agents...</div>
                     </div>
-                    <button id="nextPageButton" class="page-button" title="Next (→)">
-                        Next
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <polyline points="9 18 15 12 9 6"></polyline>
-                        </svg>
-                    </button>
-                </div>
-                <!-- Removed new messages indicator - just use page nav -->
-            </section>
-            
-            <!-- Conversation Stats -->
-            <aside class="stats-panel" id="statsPanel">
-                <div class="panel-header">
-                    <h2>Statistics</h2>
-                    <button id="panelCollapseButton" class="icon-button" title="Hide Panel">✕</button>
-                </div>
-                <div id="statsContent" class="stats-content">
-                    <div class="stat-item">
-                        <span class="stat-label">Total Agents</span>
-                        <span class="stat-value" id="totalAgents">0</span>
+                </aside>
+                
+                <!-- Chat Display -->
+                <section class="chat-display">
+                    <div id="chatView" class="chat-view">
+                        <div class="empty-state">
+                            <h3>MCP Agent Conversation Monitor</h3>
+                            <p>Select an agent to view their conversation history</p>
+                            <p class="muted">Agents are controlled via Claude CLI</p>
+                        </div>
                     </div>
-                    <div class="stat-item">
-                        <span class="stat-label">Total Messages</span>
-                        <span class="stat-value" id="totalMessages">0</span>
+                    <!-- Page Navigation -->
+                    <div id="pageNavigation" class="page-navigation" style="display: none;">
+                        <button id="prevPageButton" class="page-button" disabled title="Previous (←)">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polyline points="15 18 9 12 15 6"></polyline>
+                            </svg>
+                            Previous
+                        </button>
+                        <div class="page-info">
+                            Message <input type="number" id="pageInput" class="page-input" value="1" min="1"> / <span id="totalPages">1</span>
+                        </div>
+                        <button id="nextPageButton" class="page-button" title="Next (→)">
+                            Next
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polyline points="9 18 15 12 9 6"></polyline>
+                            </svg>
+                        </button>
                     </div>
-                    <div class="stat-item">
-                        <span class="stat-label">Broadcasts</span>
-                        <span class="stat-value" id="totalBroadcasts">0</span>
+                </section>
+                
+                <!-- Conversation Stats -->
+                <aside class="stats-panel" id="statsPanel">
+                    <div class="panel-header">
+                        <h2>Statistics</h2>
+                        <button id="panelCollapseButton" class="icon-button" title="Hide Panel">✕</button>
                     </div>
-                </div>
-            </aside>
-        </main>
+                    <div id="statsContent" class="stats-content">
+                        <div class="stat-item">
+                            <span class="stat-label">Total Agents</span>
+                            <span class="stat-value" id="totalAgents">0</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-label">Total Messages</span>
+                            <span class="stat-value" id="totalMessages">0</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-label">Broadcasts</span>
+                            <span class="stat-value" id="totalBroadcasts">0</span>
+                        </div>
+                    </div>
+                </aside>
+            </main>
+        </div>
+    </div>
+    
+    <!-- Workflow Editor -->
+    <div id="workflow-tab" class="tab-content">
+        <iframe src="workflow-editor.html"></iframe>
     </div>
     
     <script src="monitor.js"></script>
+    <script>
+        // Simple tab switching
+        document.querySelectorAll('.tab-button').forEach(button => {
+            button.addEventListener('click', () => {
+                // Update active button
+                document.querySelectorAll('.tab-button').forEach(b => b.classList.remove('active'));
+                button.classList.add('active');
+                
+                // Update active content
+                document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+                const tabName = button.dataset.tab;
+                document.getElementById(tabName + '-tab').classList.add('active');
+            });
+        });
+    </script>
 </body>
 </html>

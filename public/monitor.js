@@ -54,6 +54,97 @@ const agentEmojis = ['🤖', '🦾', '👾', '🚀', '🎭', '🦸', '🧙', '�
                      '🌈', '⚡', '🔥', '❄️', '🌊', '🌪️', '☄️', '✨', '💥', '🎆'];
 const agentEmojiMap = new Map();
 
+// Load workflow definitions
+let workflowDefinitions = null;
+async function loadWorkflowDefinitions() {
+    try {
+        const response = await fetch('http://127.0.0.1:3113/monitor/workflows');
+        if (response.ok) {
+            const data = await response.json();
+            if (data.success) {
+                workflowDefinitions = data.workflows;
+            }
+        }
+    } catch (error) {
+        console.log('Using default workflow definitions');
+    }
+}
+
+// Detect workflow keywords and show visual indicators
+function detectAndShowWorkflows(message) {
+    const workflowHTML = [];
+    const lowerMessage = message.toLowerCase();
+    
+    // Use loaded workflow definitions or defaults
+    const workflows = workflowDefinitions || {
+        'code review': {
+            id: 'code-review',
+            title: 'Code Review Process',
+            icon: '📋',
+            steps: ['Check tests', 'Review code', 'Leave feedback']
+        },
+        'bug fix': {
+            id: 'bug-fix',
+            title: 'Bug Fix Workflow',
+            icon: '🐛',
+            steps: ['Reproduce', 'Fix', 'Test']
+        },
+        'deploy': {
+            id: 'deployment',
+            title: 'Deployment Process',
+            icon: '🚀',
+            steps: ['Test', 'Build', 'Deploy', 'Verify']
+        }
+    };
+    
+    Object.entries(workflows).forEach(([keyword, workflow]) => {
+        if (lowerMessage.includes(keyword)) {
+            const workflowId = `workflow-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+            workflowHTML.push(`
+                <div id="${workflowId}" style="margin: 8px 0; background: rgba(139, 92, 246, 0.1); 
+                            border: 1px solid #8b5cf6; border-radius: 6px; font-size: 13px;
+                            transition: all 0.2s;">
+                    <div style="padding: 8px 12px; cursor: pointer;" onclick="toggleWorkflow('${workflowId}')">
+                        <div style="display: flex; align-items: center; justify-content: space-between;">
+                            <div>
+                                <span style="color: #8b5cf6; font-weight: bold;">🔗 Workflow:</span>
+                                <span style="color: #a78bfa;"> ${workflow.icon || '📋'} ${workflow.title}</span>
+                            </div>
+                            <span style="color: #8b5cf6;" class="workflow-arrow">▼</span>
+                        </div>
+                        ${workflow.description ? `<div style="color: #9ca3af; font-size: 12px; margin-top: 4px;">${workflow.description}</div>` : ''}
+                    </div>
+                    <div class="workflow-steps" style="display: none; padding: 0 12px 8px 32px;">
+                        ${workflow.steps ? workflow.steps.map((step, i) => `
+                            <div style="color: #c9b5f8; margin: 4px 0;">
+                                ${i + 1}. ${step}
+                            </div>
+                        `).join('') : ''}
+                    </div>
+                </div>
+            `);
+        }
+    });
+    
+    return workflowHTML.join('');
+}
+
+// Toggle workflow steps visibility
+window.toggleWorkflow = function(workflowId) {
+    const element = document.getElementById(workflowId);
+    if (element) {
+        const steps = element.querySelector('.workflow-steps');
+        const arrow = element.querySelector('.workflow-arrow');
+        if (steps.style.display === 'none') {
+            steps.style.display = 'block';
+            arrow.textContent = '▲';
+        } else {
+            steps.style.display = 'none';
+            arrow.textContent = '▼';
+        }
+    }
+}
+
 // Utility Functions
 function log(message, type = 'info') {
     // Disabled for clean operation
@@ -437,6 +528,7 @@ function renderChatView() {
                             ${!msg.isBroadcast && msg.to ? ` → ${escapeHtml(recipientName)}` : ''}
                         </div>
                         <div class="message-text">${formatMessage(msg.message)}</div>
+                        ${detectAndShowWorkflows(msg.message)}
                         <div class="message-time">${fullDate} • ${formatTime(msg.timestamp)}</div>
                     </div>
                 </div>
@@ -841,6 +933,9 @@ async function init() {
     }
     
     await refreshAgents();
+    
+    // Load workflow definitions
+    await loadWorkflowDefinitions();
     
     // Initial status fetch removed
         

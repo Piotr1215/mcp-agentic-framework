@@ -47,20 +47,6 @@ export function createConversationLink(agent1Id, agent2Id) {
   };
 }
 
-/**
- * Create a workflow template resource link
- * @param {string} workflowId - The workflow identifier
- * @param {string} title - The workflow title
- * @param {string} description - The workflow description
- * @returns {Object} Resource link object
- */
-export function createWorkflowLink(workflowId, title, description) {
-  return {
-    uri: `workflow://${workflowId}`,
-    title,
-    description
-  };
-}
 
 /**
  * Extract unique conversation participants from messages
@@ -84,30 +70,3 @@ export function extractConversationPairs(messages) {
   });
 }
 
-/**
- * Detect workflow references in message content
- * @param {string} message - The message content
- * @returns {Array} Array of workflow resource links
- */
-export function detectWorkflowReferences(message) {
-  const workflows = [];
-  
-  // Simple pattern matching for workflow references
-  if (message.toLowerCase().includes('system update')) {
-    workflows.push(createWorkflowLink(
-      'system-update',
-      'System Update Workflow',
-      'Template for handling system updates'
-    ));
-  }
-  
-  if (message.toLowerCase().includes('code review')) {
-    workflows.push(createWorkflowLink(
-      'code-review-process',
-      'Code Review Process',
-      'Standard workflow for code review tasks'
-    ));
-  }
-  
-  return workflows;
-}

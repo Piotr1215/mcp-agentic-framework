@@ -90,18 +90,16 @@ describe('Resource Link Tool Results', () => {
 
       const result = await sendBroadcast(
         orchestratorId,
-        'System update: New workflow available',
+        'Important broadcast message',
         'high'
       );
       
-      // Should include resource_link to workflow template
+      // Should succeed without workflow resource links
       expect(result.structuredContent?.success).toBe(true);
-      expect(result._meta?.resource_links).toBeDefined();
-      expect(result._meta.resource_links).toContainEqual({
-        uri: 'workflow://system-update',
-        title: 'System Update Workflow',
-        description: 'Template for handling system updates'
-      });
+      // Resource links should either be undefined or empty for broadcasts without workflows
+      if (result._meta?.resource_links) {
+        expect(result._meta.resource_links).toHaveLength(0);
+      }
     });
   });
 
@@ -116,15 +114,10 @@ describe('Resource Link Tool Results', () => {
       expect(content.text).toContain('AGENT COMMUNICATION GUIDE');
     });
 
-    it('should retrieve workflow template resources', async () => {
-      const workflowUri = 'workflow://code-review-process';
-      
-      const content = await getResourceContent(workflowUri);
-      
-      expect(content.uri).toBe(workflowUri);
-      expect(content.mimeType).toBe('text/markdown');
-      expect(content.text).toContain('Code Review Process');
-      expect(content.text).toContain('Analyze code for quality issues');
+    // Workflow resource links have been replaced with hooks
+    // This test is no longer applicable
+    it.skip('should retrieve workflow template resources', async () => {
+      // Workflows are now handled by hooks, not resource links
     });
 
     it('should handle resource not found errors', async () => {

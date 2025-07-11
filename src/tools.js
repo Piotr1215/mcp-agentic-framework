@@ -8,9 +8,7 @@ import {
   addResourceLinks, 
   createAgentProfileLink,
   createConversationLink,
-  createWorkflowLink,
-  extractConversationPairs,
-  detectWorkflowReferences
+  extractConversationPairs
 } from './lib/resourceLinks.js';
 import * as path from 'path';
 
@@ -168,9 +166,11 @@ export async function sendMessage(to, from, message) {
       messageId: result.messageId 
     });
     
+    const statusMessage = `Message sent successfully from ${fromAgent.name} to ${toAgent.name}`;
+    
     return structuredResponse(
       { success: result.success },
-      `Message sent successfully from ${fromAgent.name} to ${toAgent.name}`,
+      statusMessage,
       metadata
     );
   } catch (error) {
@@ -370,17 +370,11 @@ export async function sendBroadcast(from, message, priority = 'normal') {
       await agentRegistry.trackBroadcastSent(from, result.recipientCount);
     }
     
-    // Detect workflow references in the message
-    const workflowLinks = detectWorkflowReferences(message);
-    
-    const metadata = addResourceLinks(
-      createMetadata(startTime, { 
-        tool: 'send-broadcast',
-        priority,
-        recipientCount: result.recipientCount
-      }),
-      workflowLinks
-    );
+    const metadata = createMetadata(startTime, { 
+      tool: 'send-broadcast',
+      priority,
+      recipientCount: result.recipientCount
+    });
     
     // Check if broadcast was blocked
     if (!result.success && result.error) {

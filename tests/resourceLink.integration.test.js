@@ -36,8 +36,8 @@ describe('Resource Link Integration', () => {
       description: expect.stringContaining('profile')
     });
     
-    // 2. Test broadcast with workflow links
-    console.log('\n=== Broadcasting with Workflow Links ===');
+    // 2. Test broadcast (workflows are now handled by hooks, not resource links)
+    console.log('\n=== Broadcasting Messages ===');
     const orchestratorId = orchestrator.structuredContent.id;
     const broadcastResult = await sendBroadcast(
       orchestratorId,
@@ -46,16 +46,14 @@ describe('Resource Link Integration', () => {
     );
     
     console.log('Broadcast sent to:', broadcastResult.structuredContent.recipientCount, 'agents');
-    console.log('Workflow links:', JSON.stringify(broadcastResult._meta.resource_links, null, 2));
+    console.log('Success:', broadcastResult.structuredContent.success);
     
-    expect(broadcastResult._meta.resource_links).toHaveLength(1);
-    expect(broadcastResult._meta.resource_links[0]).toEqual({
-      uri: 'workflow://system-update',
-      title: 'System Update Workflow',
-      description: 'Template for handling system updates'
-    });
+    // Broadcasts no longer include workflow resource links
+    // Workflows are now triggered by hooks configured in settings.json
+    expect(broadcastResult.structuredContent.success).toBe(true);
+    expect(broadcastResult.structuredContent.recipientCount).toBe(2);
     
-    // 3. Test another broadcast with different workflow
+    // 3. Test another broadcast
     const codeReviewerId = codeReviewer.structuredContent.id;
     const codeReviewBroadcast = await sendBroadcast(
       codeReviewerId,
@@ -64,18 +62,14 @@ describe('Resource Link Integration', () => {
     );
     
     console.log('\n=== Code Review Broadcast ===');
-    console.log('Workflow links:', JSON.stringify(codeReviewBroadcast._meta.resource_links, null, 2));
+    console.log('Success:', codeReviewBroadcast.structuredContent.success);
+    console.log('Recipients:', codeReviewBroadcast.structuredContent.recipientCount);
     
-    expect(codeReviewBroadcast._meta.resource_links).toHaveLength(1);
-    expect(codeReviewBroadcast._meta.resource_links[0]).toEqual({
-      uri: 'workflow://code-review-process',
-      title: 'Code Review Process',
-      description: 'Standard workflow for code review tasks'
-    });
+    expect(codeReviewBroadcast.structuredContent.success).toBe(true);
     
     console.log('\n=== Resource Link Implementation Complete ===');
     console.log('✅ Agent profile links in discover-agents');
-    console.log('✅ Workflow links in broadcasts');
-    console.log('✅ Resource content retrieval');
+    console.log('✅ Broadcasts work without workflow resource links');
+    console.log('✅ Workflows are now handled by hooks');
   });
 });

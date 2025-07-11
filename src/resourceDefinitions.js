@@ -158,44 +158,6 @@ export async function getResourceContent(uri, context = {}) {
         };
       }
     }
-    
-    case 'workflow': {
-      // Return workflow templates
-      const workflows = {
-        'code-review-process': {
-          title: 'Code Review Process',
-          description: 'Standard workflow for code review tasks',
-          steps: [
-            'Receive code review request',
-            'Analyze code for quality issues',
-            'Check for security vulnerabilities',
-            'Provide feedback and suggestions',
-            'Approve or request changes'
-          ]
-        },
-        'system-update': {
-          title: 'System Update Workflow',
-          description: 'Template for handling system updates',
-          steps: [
-            'Announce update to all agents',
-            'Coordinate agent downtime',
-            'Perform update',
-            'Verify system integrity',
-            'Resume normal operations'
-          ]
-        }
-      };
-      
-      const workflow = workflows[resourcePath];
-      if (workflow) {
-        return {
-          uri,
-          mimeType: 'text/markdown',
-          text: `# ${workflow.title}\n\n${workflow.description}\n\n## Steps:\n${workflow.steps.map((s, i) => `${i + 1}. ${s}`).join('\n')}`
-        };
-      }
-      break;
-    }
   }
   
   throw new Error(`Resource not found: ${uri}`);

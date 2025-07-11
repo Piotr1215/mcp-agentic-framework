@@ -477,6 +477,122 @@ app.get('/monitor/messages', async (req, res) => {
 });
 
 
+// Monitor endpoint - get all agents data
+app.get('/monitor/agents', async (req, res) => {
+  try {
+    // Set CORS headers for monitor endpoints
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    
+    const fs = await import('fs/promises');
+    const path = await import('path');
+    const agentsPath = path.join('/tmp/mcp-agentic-framework', 'agents.json');
+    
+    try {
+      const data = await fs.readFile(agentsPath, 'utf8');
+      const agents = JSON.parse(data);
+      res.json({
+        success: true,
+        agents,
+        count: Object.keys(agents).length
+      });
+    } catch (error) {
+      // File doesn't exist yet
+      res.json({
+        success: true,
+        agents: {},
+        count: 0
+      });
+    }
+  } catch (error) {
+    console.error('Error fetching agents for monitor:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// Monitor endpoint - get workflow definitions
+app.get('/monitor/workflows', async (req, res) => {
+  try {
+    // Set CORS headers
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, PUT');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    
+    const fs = await import('fs/promises');
+    const path = await import('path');
+    const workflowsPath = path.join(process.env.HOME, 'claude-workflows', 'workflows.json');
+    
+    try {
+      const data = await fs.readFile(workflowsPath, 'utf8');
+      const workflowData = JSON.parse(data);
+      res.json({
+        success: true,
+        workflows: workflowData.workflows
+      });
+    } catch (error) {
+      // File doesn't exist, return defaults
+      res.json({
+        success: true,
+        workflows: {
+          'code review': {
+            id: 'code-review',
+            title: 'Code Review Process',
+            icon: '📋',
+            steps: ['Check tests', 'Review code', 'Leave feedback']
+          }
+        }
+      });
+    }
+  } catch (error) {
+    console.error('Error fetching workflows:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// Monitor endpoint - update workflow definitions
+app.put('/monitor/workflows', async (req, res) => {
+  try {
+    // Set CORS headers
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, PUT');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    
+    const fs = await import('fs/promises');
+    const path = await import('path');
+    const workflowsPath = path.join(process.env.HOME, 'claude-workflows', 'workflows.json');
+    
+    const { workflows } = req.body;
+    if (!workflows) {
+      res.status(400).json({
+        success: false,
+        error: 'Missing workflows data'
+      });
+      return;
+    }
+    
+    // Save the updated workflows
+    await fs.writeFile(workflowsPath, JSON.stringify({ workflows }, null, 2));
+    
+    res.json({
+      success: true,
+      message: 'Workflows updated successfully'
+    });
+  } catch (error) {
+    console.error('Error updating workflows:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
 // Cleanup old messages endpoint
 app.delete('/monitor/cleanup', async (req, res) => {
   try {
@@ -524,7 +640,8 @@ app.get('/', (req, res) => {
       },
       monitor: {
         messages: '/monitor/messages',
-        cleanup: '/monitor/cleanup'
+        cleanup: '/monitor/cleanup',
+        agents: '/monitor/agents'
       }
     }
   });

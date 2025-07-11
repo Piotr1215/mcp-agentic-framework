@@ -60,7 +60,7 @@ body {
 .app-container {
   display: flex;
   flex-direction: column;
-  height: 100vh;
+  height: 100%;
 }
 
 /* Header */
@@ -298,6 +298,7 @@ body {
   flex: 1;
   display: flex;
   overflow: hidden;
+  min-height: 0; /* Important for flexbox children to scroll */
 }
 
 /* Agent Panel */
@@ -585,14 +586,44 @@ body {
   flex-direction: column;
   background: var(--bg-secondary);
   position: relative;
+  min-height: 0; /* Allow flexbox child to scroll */
+  overflow: hidden; /* Contain the scrolling to chat-view */
 }
 
 .chat-view {
-  flex: 1;
-  overflow: hidden; /* No scrolling! */
-  padding: 1.5rem;
+  flex: 1 1 auto;
+  overflow-y: auto; /* Auto scrollbar when needed */
+  overflow-x: hidden; /* Prevent horizontal scrolling */
+  padding: 0; /* Remove padding from scroll container */
   display: flex;
   flex-direction: column;
+  scroll-behavior: smooth; /* Smooth scrolling */
+  min-height: 0; /* Allow shrinking */
+}
+
+/* Use flexbox centering that works with scrolling */
+.chat-view > .messages-container {
+  margin: auto; /* Centers vertically when content is smaller */
+  width: 100%;
+}
+
+/* Custom scrollbar for chat view */
+.chat-view::-webkit-scrollbar {
+  width: 8px;
+}
+
+.chat-view::-webkit-scrollbar-track {
+  background: var(--bg-tertiary);
+  border-radius: 4px;
+}
+
+.chat-view::-webkit-scrollbar-thumb {
+  background: var(--text-muted);
+  border-radius: 4px;
+}
+
+.chat-view::-webkit-scrollbar-thumb:hover {
+  background: var(--text-secondary);
 }
 
 .chat-header {
@@ -718,7 +749,8 @@ body {
   max-width: calc(100% - 60px);
   transition: var(--transition);
   position: relative;
-  overflow: hidden;
+  overflow-wrap: break-word; /* Break long words */
+  word-wrap: break-word; /* Legacy support */
   border: 1px solid var(--border);
 }
 
@@ -744,6 +776,8 @@ body {
   line-height: 1.5;
   white-space: pre-wrap;
   word-break: break-word;
+  max-height: none; /* Remove any height restrictions */
+  overflow: visible; /* Ensure content is not hidden */
 }
 
 .message-text strong {
@@ -761,6 +795,8 @@ body {
   border-radius: 0.25rem;
   font-family: monospace;
   font-size: 0.875em;
+  white-space: pre-wrap; /* Allow code to wrap */
+  word-break: break-word; /* Break long code lines */
 }
 
 .message.sent .message-text code {
@@ -795,6 +831,24 @@ body {
   display: block;
   content: '';
   margin: 0.25rem 0;
+}
+
+/* Pre-formatted text blocks */
+.message-text pre {
+  background: rgba(0, 0, 0, 0.05);
+  padding: 0.75rem;
+  border-radius: 0.375rem;
+  font-family: monospace;
+  font-size: 0.875em;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-x: auto;
+  max-width: 100%;
+  margin: 0.5rem 0;
+}
+
+.message.sent .message-text pre {
+  background: rgba(255, 255, 255, 0.15);
 }
 
 .message-time {
@@ -1166,9 +1220,10 @@ body {
   flex: 1;
   display: flex;
   flex-direction: column;
-  justify-content: center; /* Center single message */
+  justify-content: safe center; /* Center when content fits, start when scrolling */
   align-items: stretch;
   min-height: 0;
+  padding: 1.5rem;
   padding-bottom: 80px; /* Space for page navigation */
-  overflow: hidden; /* No scrolling within page */
+  overflow: visible; /* Allow content to be visible */
 }
