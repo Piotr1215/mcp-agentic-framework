@@ -6,75 +6,10 @@
     <title>MCP Agent Monitor</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="style.css?v=2" />
-    <style>
-        /* Simple tab navigation */
-        .tab-navigation {
-            display: flex;
-            gap: 10px;
-            padding: 10px;
-            background: #0d1117;
-            border-bottom: 1px solid #30363d;
-        }
-        
-        .tab-button {
-            padding: 8px 16px;
-            background: #161b22;
-            color: #8b949e;
-            border: 1px solid #30363d;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 14px;
-            transition: all 0.2s;
-        }
-        
-        .tab-button:hover {
-            background: #21262d;
-            color: #f0f6fc;
-        }
-        
-        .tab-button.active {
-            background: #1f6feb;
-            color: white;
-            border-color: #1f6feb;
-        }
-        
-        .tab-content {
-            display: none;
-        }
-        
-        .tab-content.active {
-            display: block;
-        }
-        
-        #monitor-tab {
-            height: calc(100vh - 42px);
-        }
-        
-        #monitor-tab .app-container {
-            height: 100%;
-        }
-        
-        #workflow-tab {
-            height: calc(100vh - 42px);
-        }
-        
-        .tab-content iframe {
-            width: 100%;
-            height: 100%;
-            border: none;
-        }
-    </style>
 </head>
 <body>
-    <!-- Simple Tab Navigation -->
-    <div class="tab-navigation">
-        <button class="tab-button active" data-tab="monitor">MCP Agent Monitor</button>
-        <button class="tab-button" data-tab="workflow">Workflow Editor</button>
-    </div>
     
-    <!-- Original Monitor -->
-    <div id="monitor-tab" class="tab-content active">
-        <div class="app-container">
+    <div class="app-container">
             <!-- Header -->
             <header class="app-header">
                 <h1>MCP Agent Monitor</h1>
@@ -175,29 +110,8 @@
                     </div>
                 </aside>
             </main>
-        </div>
-    </div>
-    
-    <!-- Workflow Editor -->
-    <div id="workflow-tab" class="tab-content">
-        <iframe src="workflow-editor.html"></iframe>
     </div>
     
     <script src="monitor.js"></script>
-    <script>
-        // Simple tab switching
-        document.querySelectorAll('.tab-button').forEach(button => {
-            button.addEventListener('click', () => {
-                // Update active button
-                document.querySelectorAll('.tab-button').forEach(b => b.classList.remove('active'));
-                button.classList.add('active');
-                
-                // Update active content
-                document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-                const tabName = button.dataset.tab;
-                document.getElementById(tabName + '-tab').classList.add('active');
-            });
-        });
-    </script>
 </body>
 </html>
