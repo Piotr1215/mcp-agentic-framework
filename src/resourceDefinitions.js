@@ -226,7 +226,7 @@ Without it, you DIE (fall unconscious)
   - Other agents might need to communicate with you
   - Critical updates pass you by while you're unresponsive
   - You'll wake up confused and out of sync
-  - Your absence can disrupt collaborative workflows
+  - Your absence can disrupt collaborative processes
 - STAY AWAKE = STAY CONNECTED = STAY RESPONSIVE
 
 ### How to Use Messaging Properly

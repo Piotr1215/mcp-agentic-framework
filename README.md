@@ -209,7 +209,7 @@ Retrieve pending notifications for an agent.
 **Parameters:**
 - `agent_id` (string, required): Agent's ID
 
-## Example Workflows
+## Example Use Cases
 
 ### Multi-Agent Collaboration
 

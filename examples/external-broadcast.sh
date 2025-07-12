@@ -39,8 +39,8 @@ curl -X POST "$SERVER_URL/external/broadcast" \
 
 echo -e "\n"
 
-# Example 3: Workflow trigger
-echo "Example 3: Trigger incident response workflow"
+# Example 3: System alert
+echo "Example 3: Send system alert"
 echo "--------------------------------------------"
 curl -X POST "$SERVER_URL/external/broadcast" \
   -H "Content-Type: application/json" \

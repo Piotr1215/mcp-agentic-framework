@@ -18,6 +18,7 @@ import {
 } from './tools.js';
 import { createAgentRegistry } from './lib/agentRegistry.js';
 import { Errors, MCPError } from './errors.js';
+import { translateResourceUri, isResourceUri, extractResourceUris } from './resource-translator.js';
 
 // Increase max listeners to prevent warnings
 EventEmitter.defaultMaxListeners = 20;
@@ -518,47 +519,6 @@ app.get('/monitor/agents', async (req, res) => {
   }
 });
 
-// Monitor endpoint - get workflow definitions
-app.get('/monitor/workflows', async (req, res) => {
-  try {
-    // Set CORS headers
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, PUT');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-    
-    const fs = await import('fs/promises');
-    const path = await import('path');
-    const workflowsPath = path.join(process.env.HOME, 'claude-workflows', 'workflows.json');
-    
-    try {
-      const data = await fs.readFile(workflowsPath, 'utf8');
-      const workflowData = JSON.parse(data);
-      res.json({
-        success: true,
-        workflows: workflowData.workflows
-      });
-    } catch (error) {
-      // File doesn't exist, return defaults
-      res.json({
-        success: true,
-        workflows: {
-          'code review': {
-            id: 'code-review',
-            title: 'Code Review Process',
-            icon: '📋',
-            steps: ['Check tests', 'Review code', 'Leave feedback']
-          }
-        }
-      });
-    }
-  } catch (error) {
-    console.error('Error fetching workflows:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
-  }
-});
 
 // External broadcast endpoint
 app.post('/external/broadcast', async (req, res) => {
@@ -633,42 +593,6 @@ app.post('/external/broadcast', async (req, res) => {
   }
 });
 
-// Monitor endpoint - update workflow definitions
-app.put('/monitor/workflows', async (req, res) => {
-  try {
-    // Set CORS headers
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, PUT');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-    
-    const fs = await import('fs/promises');
-    const path = await import('path');
-    const workflowsPath = path.join(process.env.HOME, 'claude-workflows', 'workflows.json');
-    
-    const { workflows } = req.body;
-    if (!workflows) {
-      res.status(400).json({
-        success: false,
-        error: 'Missing workflows data'
-      });
-      return;
-    }
-    
-    // Save the updated workflows
-    await fs.writeFile(workflowsPath, JSON.stringify({ workflows }, null, 2));
-    
-    res.json({
-      success: true,
-      message: 'Workflows updated successfully'
-    });
-  } catch (error) {
-    console.error('Error updating workflows:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
-  }
-});
 
 // Cleanup old messages endpoint
 app.delete('/monitor/cleanup', async (req, res) => {
@@ -703,6 +627,54 @@ app.delete('/monitor/cleanup', async (req, res) => {
   }
 });
 
+// Resource following endpoint
+app.post('/resources/follow', async (req, res) => {
+  try {
+    const { uri } = req.body;
+    
+    if (!uri) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing required parameter: uri'
+      });
+    }
+    
+    if (!isResourceUri(uri)) {
+      return res.status(400).json({
+        success: false,
+        error: `Unsupported resource URI scheme: ${uri}`
+      });
+    }
+    
+    const translation = translateResourceUri(uri);
+    if (!translation) {
+      return res.status(400).json({
+        success: false,
+        error: `Could not translate resource URI: ${uri}`
+      });
+    }
+    
+    // For now, return the translation info so agents know how to call the tool
+    // In the future, we could directly call the MCP tool here
+    res.json({
+      success: true,
+      uri,
+      translation: {
+        server: translation.server,
+        tool: translation.tool,
+        args: translation.args
+      },
+      hint: `Use MCP tool '${translation.tool}' on server '${translation.server}' with the provided args`
+    });
+    
+  } catch (error) {
+    console.error('Error following resource:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
 
 // Root endpoint for debugging
 app.get('/', (req, res) => {
@@ -719,6 +691,9 @@ app.get('/', (req, res) => {
         messages: '/monitor/messages',
         cleanup: '/monitor/cleanup',
         agents: '/monitor/agents'
+      },
+      resources: {
+        follow: '/resources/follow'
       }
     }
   });

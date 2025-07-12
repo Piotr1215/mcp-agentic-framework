@@ -44,7 +44,7 @@ export async function handleCompletion(ref, argument) {
       // Suggest common agent roles
       suggestions = [
         'analyzes data patterns and trends',
-        'coordinates multi-agent workflows',
+        'coordinates multi-agent tasks',
         'monitors system health and performance',
         'processes incoming data streams',
         'validates data integrity and quality',
