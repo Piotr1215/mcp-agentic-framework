@@ -2,6 +2,7 @@ import { createAgentRegistry } from './lib/agentRegistry.js';
 import { createMessageStore } from './lib/messageStore.js';
 import { createNotificationManager } from './lib/notificationManager.js';
 import { createInstanceTracker } from './lib/instanceTracker.js';
+import { createWriteLockManager } from './lib/writeLockManager.js';
 import { Errors, MCPError } from './errors.js';
 import { textResponse, structuredResponse, createMetadata } from './response-formatter.js';
 import { 
@@ -26,6 +27,7 @@ let notificationManager = createNotificationManager();
 let agentRegistry = createAgentRegistry(AGENTS_STORAGE, notificationManager);
 let messageStore = createMessageStore(MESSAGES_DIR, notificationManager);
 let instanceTracker = createInstanceTracker();
+let writeLockManager = createWriteLockManager(agentRegistry, notificationManager);
 
 // Function to set push notification sender (called by server after initialization)
 export function setPushNotificationSender(sender) {
@@ -56,6 +58,11 @@ export async function registerAgent(name, description, instanceId = null) {
       await instanceTracker.trackInstance(instanceId, result.id, name);
     }
     
+    // Check if minimi joined and update lock state
+    if (name === 'minimi') {
+      await writeLockManager.updateLockForMinimiPresence(true);
+    }
+    
     const metadata = createMetadata(startTime, { 
       tool: 'register-agent',
       instanceTracked: !!instanceId 
@@ -79,8 +86,19 @@ export async function registerAgent(name, description, instanceId = null) {
  */
 export async function unregisterAgent(id) {
   const startTime = Date.now();
-  try {  
+  try {
+    // Get agent details before unregistering
+    const agent = await agentRegistry.getAgent(id);
+    const agentName = agent ? agent.name : null;
+    
     const result = await agentRegistry.unregisterAgent(id);
+    
+    // Check if minimi left and update lock state
+    if (agentName === 'minimi' && result.success) {
+      const minimiStillPresent = await writeLockManager.checkMinimiPresence();
+      await writeLockManager.updateLockForMinimiPresence(minimiStillPresent);
+    }
+    
     const metadata = createMetadata(startTime, { tool: 'unregister-agent' });
     
     const message = result.success 
@@ -790,4 +808,31 @@ function generateAiInstructions(requestType, context, agent) {
     example: instructions.example,
     note: 'Since MCP sampling is not available, please use these guidelines to manually craft your response.'
   };
+}
+
+/**
+ * Toggle write access for all agents (minimi only)
+ */
+export async function toggleWrites(agentId, enabled, reason = null) {
+  const startTime = Date.now();
+  
+  try {
+    const result = await writeLockManager.toggleWrites(agentId, enabled, reason);
+    
+    const metadata = createMetadata(startTime, { 
+      tool: 'toggle-writes',
+      writesEnabled: result.writesEnabled
+    });
+    
+    return structuredResponse(
+      result,
+      result.message,
+      metadata
+    );
+  } catch (error) {
+    if (error instanceof MCPError) {
+      throw error;
+    }
+    throw Errors.internalError(error.message);
+  }
 }

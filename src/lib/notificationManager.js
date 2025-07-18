@@ -229,6 +229,23 @@ export const createNotificationManager = (pushNotificationSender = null) => {
     return notification;
   };
 
+  // Emit system broadcast message (used by framework internals)
+  const sendSystemBroadcast = async (message, priority = 'normal') => {
+    const notification = createNotification(NotificationTypes.BROADCAST_MESSAGE, {
+      from: 'system',
+      message,
+      priority,
+      isSystemMessage: true
+    });
+    
+    // Send push notification to connected clients
+    await sendPushNotification(NotificationTypes.BROADCAST_MESSAGE, notification.params);
+    
+    emitter.emit(NotificationTypes.BROADCAST_MESSAGE, notification);
+    emitter.emit('broadcast/*', notification);
+    return notification;
+  };
+
   // Emit queue status
   const notifyQueueStatus = async (agentId, pendingMessages, queueSize, utilization) => {
     const notification = createNotification(NotificationTypes.QUEUE_STATUS, {
@@ -320,6 +337,7 @@ export const createNotificationManager = (pushNotificationSender = null) => {
     notifyMessageDelivered,
     notifyMessageAcknowledged,
     notifyBroadcast,
+    sendSystemBroadcast,
     notifyQueueStatus,
     getSubscriptions,
     getPendingNotifications,

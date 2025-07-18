@@ -573,6 +573,8 @@ async function pollMessages() {
         
         // Always update state with processed messages
         state.allMessages = processedMessages;
+        // Sort messages to match UI display order (newest first)
+        state.allMessages.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
         
         if (hasNewMessages || state.isFirstPoll) {
             // Rebuild per-agent message arrays

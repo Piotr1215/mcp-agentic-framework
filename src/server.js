@@ -20,7 +20,8 @@ import {
   updateAgentStatus,
   sendBroadcast,
   setPushNotificationSender,
-  setMcpServer
+  setMcpServer,
+  toggleWrites
 } from './tools.js';
 import { Errors, MCPError } from './errors.js';
 
@@ -184,6 +185,11 @@ export function createServer() {
           const { agent_id, context, request_type } = args;
           const { agentAiAssist } = await import('./tools.js');
           return await agentAiAssist(agent_id, context, request_type);
+        }
+
+        case 'toggle-writes': {
+          const { agent_id, enabled, reason } = args;
+          return await toggleWrites(agent_id, enabled, reason);
         }
 
         default:

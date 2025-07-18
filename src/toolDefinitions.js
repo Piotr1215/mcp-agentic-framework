@@ -340,5 +340,52 @@ export const toolDefinitions = [
       required: ['success'],
       additionalProperties: false
     }
+  },
+  {
+    name: 'toggle-writes',
+    title: 'Toggle Write Access',
+    description: 'Toggle global write access for all agents. Only callable by minimi. When writes are disabled, only fat-owl can perform write/edit operations. Automatically broadcasts the new state to all agents.',
+    inputSchema: {
+      $schema: 'http://json-schema.org/draft-07/schema#',
+      type: 'object',
+      properties: {
+        agent_id: {
+          type: 'string',
+          description: 'Your agent ID (must be minimi)',
+          minLength: 1
+        },
+        enabled: {
+          type: 'boolean',
+          description: 'Whether to enable (true) or disable (false) write access'
+        },
+        reason: {
+          type: 'string',
+          description: 'Optional reason for the toggle',
+          maxLength: 200
+        }
+      },
+      required: ['agent_id', 'enabled'],
+      additionalProperties: false
+    },
+    outputSchema: {
+      $schema: 'http://json-schema.org/draft-07/schema#',
+      type: 'object',
+      properties: {
+        success: {
+          type: 'boolean',
+          description: 'Whether the toggle was successful'
+        },
+        writesEnabled: {
+          type: 'boolean',
+          description: 'Current state of write access'
+        },
+        message: {
+          type: 'string',
+          description: 'Broadcast message sent to all agents'
+        }
+      },
+      required: ['success', 'writesEnabled', 'message'],
+      additionalProperties: false
+    }
   }
 ];

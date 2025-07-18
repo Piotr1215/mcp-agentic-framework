@@ -96,6 +96,12 @@ async function handleToolCall(name, args) {
       return await agentAiAssist(agent_id, context, request_type);
     }
 
+    case 'toggle-writes': {
+      const { agent_id, enabled, reason } = args;
+      const { toggleWrites } = await import('./tools.js');
+      return await toggleWrites(agent_id, enabled, reason);
+    }
+
     default:
       throw Errors.toolNotFound(name);
   }
