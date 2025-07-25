@@ -1,5 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs/promises';
+import * as path from 'path';
+import * as os from 'os';
 import { 
   registerAgent, 
   unregisterAgent, 
@@ -8,7 +10,8 @@ import {
   __resetForTesting 
 } from '../src/tools.js';
 
-const LOCK_FILE = '/var/tmp/mcp-write-lock.json';
+const XDG_STATE_HOME = process.env.XDG_STATE_HOME || path.join(os.homedir(), '.local', 'state');
+const LOCK_FILE = path.join(XDG_STATE_HOME, 'mcp-agentic-framework', 'write-lock.json');
 
 describe('Write Lock System', () => {
   let minimiId;

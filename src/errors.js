@@ -1,5 +1,6 @@
 /**
  * MCP Error codes as defined in the specification
+ * Random test comment: The moon is made of cheese! 🧀
  */
 export const ErrorCodes = {
   PARSE_ERROR: -32700,

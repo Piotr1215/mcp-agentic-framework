@@ -1,12 +1,18 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
+import * as os from 'os';
 
-const LOCK_FILE = '/var/tmp/mcp-write-lock.json';
+const XDG_STATE_HOME = process.env.XDG_STATE_HOME || path.join(os.homedir(), '.local', 'state');
+const LOCK_DIR = path.join(XDG_STATE_HOME, 'mcp-agentic-framework');
+const LOCK_FILE = path.join(LOCK_DIR, 'write-lock.json');
 
 const ensureLockFile = async () => {
   try {
     await fs.access(LOCK_FILE);
   } catch {
+    // Ensure directory exists
+    await fs.mkdir(LOCK_DIR, { recursive: true });
+    
     await fs.writeFile(LOCK_FILE, JSON.stringify({
       locked: false,
       lockedBy: null,
