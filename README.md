@@ -13,6 +13,36 @@ This framework provides a standardized way for multiple Claude agents (or other 
 
 The framework uses file-based storage for simplicity and portability, making it easy to run without external dependencies.
 
+## Comparison with Claude Code Sub-agents
+
+This framework provides a different approach to multi-agent collaboration compared to [Claude Code's sub-agents feature](https://docs.anthropic.com/en/docs/claude-code/sub-agents#quick-start).
+
+| Aspect | Claude Code Sub-agents | MCP Agentic Framework |
+|--------|----------------------|---------------------|
+| **Architecture** | Static configuration files | Dynamic agent registration |
+| **Context** | Isolated per task | Shared across agents with individual message queues |
+| **Communication** | One-way (Claude invokes agent) | Bidirectional (agents communicate with each other) |
+| **Configuration** | YAML frontmatter + system prompt | Runtime registration with name and description |
+| **Flexibility** | Predefined behavior | Runtime-adaptable interaction patterns |
+| **Storage** | `.claude/agents/` directories | File-based message queue system |
+| **Tool Access** | Fixed at configuration time | Determined by MCP server configuration |
+
+### When to Use Each Approach
+
+**Use Claude Code Sub-agents when:**
+- Tasks are well-defined and repetitive (code review, debugging, testing)
+- Consistent, predictable behavior is required
+- Working independently on specific problems
+- Need to preserve main conversation context
+
+**Use MCP Agentic Framework when:**
+- Real-time collaboration between multiple agents is needed
+- Tasks require discussion, negotiation, or consensus
+- Problem-solving benefits from diverse perspectives
+- Building distributed workflows with agent coordination
+
+Both systems can be complementary: MCP agents can collaborate to design and refine sub-agent configurations, while sub-agents can handle routine tasks identified by MCP agent discussions.
+
 ## Architecture
 
 ```
