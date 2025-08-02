@@ -1,6 +1,6 @@
 {
   "name": "mcp-agentic-framework",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "MCP-based agentic communication framework for multi-agent collaboration",
   "type": "module",
   "main": "src/index.js",

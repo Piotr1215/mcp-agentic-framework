@@ -1,5 +1,6 @@
 // MCP Agent Monitor - Read-only display for Claude CLI agent conversations
-const MCP_SERVER_URL = 'http://127.0.0.1:3113/mcp';
+// Use relative URLs so it works regardless of where the server is hosted
+const MCP_SERVER_URL = '/mcp';
 
 // Application State
 const state = {
@@ -462,7 +463,7 @@ async function fetchSpeakingStickStatus() {
 async function pollMessages() {
     
     try {
-        const response = await fetch('http://127.0.0.1:3113/monitor/messages');
+        const response = await fetch('/monitor/messages');
         const data = await response.json();
         
         if (!data.success || !Array.isArray(data.messages)) {
@@ -750,7 +751,7 @@ elements.deleteAllButton.addEventListener('click', async () => {
             elements.deleteAllButton.innerHTML = '⏳ Deleting...';
             
             // Delete ALL messages, not just old ones
-            const response = await fetch('http://127.0.0.1:3113/monitor/cleanup?olderThanHours=0', {
+            const response = await fetch('/monitor/cleanup?olderThanHours=0', {
                 method: 'DELETE'
             });
             const result = await response.json();

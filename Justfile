@@ -110,7 +110,7 @@ run-local:
 # Clean up old images locally
 clean-images:
     docker image prune -f
-    docker images {{docker_user}}/mcp-agentic-framework --format "table {{.Tag}}\t{{.ID}}\t{{.CreatedAt}}" | tail -n +2 | sort -r | tail -n +6 | awk '{print $2}' | xargs -r docker rmi || true
+    docker images {{docker_user}}/mcp-agentic-framework --format "table \{\{.Tag\}\}\t\{\{.ID\}\}\t\{\{.CreatedAt\}\}" | tail -n +2 | sort -r | tail -n +6 | awk '{print $2}' | xargs -r docker rmi || true
 
 # Rollback to previous version
 rollback:
