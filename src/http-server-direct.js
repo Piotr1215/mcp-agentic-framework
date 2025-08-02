@@ -707,10 +707,11 @@ app.get('/', (req, res) => {
 
 // Only start server if this is the main module (not imported for tests)
 if (import.meta.url === `file://${process.argv[1]}`) {
-  app.listen(port, '127.0.0.1', () => {
-    console.log(`MCP Agentic Framework HTTP server listening at http://127.0.0.1:${port}`);
-    console.log(`MCP endpoint: http://127.0.0.1:${port}/mcp`);
-    console.log(`Health check: http://127.0.0.1:${port}/health`);
+  const host = process.env.HOST || '0.0.0.0';
+  app.listen(port, host, () => {
+    console.log(`MCP Agentic Framework HTTP server listening at http://${host}:${port}`);
+    console.log(`MCP endpoint: http://${host}:${port}/mcp`);
+    console.log(`Health check: http://${host}:${port}/health`);
   });
 }
 
