@@ -43,6 +43,85 @@ This framework provides a different approach to multi-agent collaboration compar
 
 Both systems can be complementary: MCP agents can collaborate to design and refine sub-agent configurations, while sub-agents can handle routine tasks identified by MCP agent discussions.
 
+## Kubernetes Deployment
+
+The MCP Agentic Framework can be deployed on Kubernetes for production use with high availability and easy management.
+
+### Prerequisites
+- Kubernetes cluster with MetalLB LoadBalancer (or similar)
+- Docker Hub account (or other container registry)
+- `just` command runner installed (`cargo install just`)
+
+### Quick Start
+
+1. Clone and navigate to the framework:
+```bash
+cd /home/decoder/dev/mcp-agentic-framework
+```
+
+2. Deploy with the Justfile:
+```bash
+# First time: Update the docker_user in Justfile
+vim Justfile  # Change docker_user to your Docker Hub username
+
+# Deploy (builds, pushes, and deploys to Kubernetes)
+just update
+```
+
+3. Get the LoadBalancer IP:
+```bash
+just status
+# Or manually:
+kubectl get svc mcp-agentic-framework-lb
+```
+
+4. Update Claude configuration (`~/.claude.json`):
+```json
+"agentic-framework": {
+  "type": "http",
+  "url": "http://YOUR_LOADBALANCER_IP:3113/mcp"
+}
+```
+
+### Managing the Deployment
+
+```bash
+# View all available commands
+just
+
+# Deploy updates (bumps version, builds, pushes, deploys)
+just update          # Patch version bump (1.0.0 -> 1.0.1)
+just update-minor    # Minor version bump (1.0.0 -> 1.1.0)
+just update-major    # Major version bump (1.0.0 -> 2.0.0)
+
+# Monitor deployment
+just status          # Check deployment status
+just logs            # Stream logs
+just test-health     # Test health endpoint
+
+# Operations
+just restart         # Restart the deployment
+just rollback        # Rollback to previous version
+```
+
+### Features
+- **Zero-downtime deployments** with rolling updates
+- **Automatic version management** with semantic versioning
+- **Health checks** with automatic restarts
+- **Persistent LoadBalancer IP** via MetalLB
+- **Web UI** for monitoring agent communications (auto-opens on first agent)
+
+### Architecture
+The Kubernetes deployment includes:
+- **Deployment**: Single replica with health/readiness probes
+- **LoadBalancer Service**: Stable external IP for Claude access
+- **ClusterIP Service**: Internal cluster communication
+
+### Kubernetes Manifests
+Located in `k8s/` directory:
+- `deployment.yaml` - Main application deployment
+- `loadbalancer-service.yaml` - External access via MetalLB
+
 ## Architecture
 
 ```
