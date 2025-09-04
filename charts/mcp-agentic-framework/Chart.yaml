@@ -1,0 +1,13 @@
+apiVersion: v2
+name: mcp-agentic-framework
+description: A Helm chart for MCP Agentic Framework
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+home: https://github.com/Piotr1215/mcp-agentic-framework
+maintainers:
+- name: Piotr1215
+keywords:
+- mcp
+- agent
+- ai

@@ -1,0 +1,37 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "mcp-agentic-framework.fullname" . }}
+  labels:
+    {{- include "mcp-agentic-framework.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.service.type }}
+  ports:
+  - port: {{ .Values.service.port }}
+    targetPort: {{ .Values.service.port }}
+    protocol: TCP
+    name: http
+  selector:
+    {{- include "mcp-agentic-framework.selectorLabels" . | nindent 4 }}
+---
+{{- if .Values.service.loadBalancer.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "mcp-agentic-framework.fullname" . }}-lb
+  labels:
+    {{- include "mcp-agentic-framework.labels" . | nindent 4 }}
+  {{- if .Values.service.loadBalancer.ip }}
+  annotations:
+    metallb.universe.tf/loadBalancerIPs: {{ .Values.service.loadBalancer.ip | quote }}
+  {{- end }}
+spec:
+  type: LoadBalancer
+  ports:
+  - port: {{ .Values.service.port }}
+    targetPort: {{ .Values.service.port }}
+    protocol: TCP
+    name: http
+  selector:
+    {{- include "mcp-agentic-framework.selectorLabels" . | nindent 4 }}
+{{- end }}

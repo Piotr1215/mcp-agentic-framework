@@ -1,0 +1,47 @@
+# Default values for mcp-agentic-framework
+replicaCount: 1
+
+image:
+  repository: piotrzan/mcp-agentic-framework
+  pullPolicy: Always
+  tag: "latest"
+
+nameOverride: ""
+fullnameOverride: ""
+
+service:
+  type: ClusterIP
+  port: 3113
+  # LoadBalancer configuration (optional)
+  loadBalancer:
+    enabled: false
+    ip: ""  # Set specific IP if needed
+
+resources:
+  limits:
+    cpu: 500m
+    memory: 512Mi
+  requests:
+    cpu: 100m
+    memory: 256Mi
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+livenessProbe:
+  httpGet:
+    path: /health
+    port: 3113
+  initialDelaySeconds: 10
+  periodSeconds: 30
+
+readinessProbe:
+  httpGet:
+    path: /health
+    port: 3113
+  initialDelaySeconds: 5
+  periodSeconds: 10
+
+env:
+  NODE_ENV: production
