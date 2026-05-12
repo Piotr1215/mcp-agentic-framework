@@ -13,6 +13,24 @@ import {
 } from './lib/resourceLinks.js';
 import * as path from 'path';
 
+async function callYouSearchApi({ query, count = 5, country, safesearch }) {
+  const url = new URL('https://api.you.com/v1/agents/search');
+  url.searchParams.set('query', query);
+  url.searchParams.set('count', String(count));
+  if (country) url.searchParams.set('country', country);
+  if (safesearch) url.searchParams.set('safesearch', safesearch);
+
+  const headers = {};
+  if (process.env.YDC_API_KEY) headers['X-API-Key'] = process.env.YDC_API_KEY;
+
+  const response = await fetch(url, { headers });
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(`You.com Search API error ${response.status}: ${body}`);
+  }
+  return response.json();
+}
+
 // Initialize storage paths
 const STORAGE_DIR = process.env.NODE_ENV === 'test' 
   ? `/tmp/mcp-agentic-framework-test-${process.pid}-${Date.now()}`
@@ -28,6 +46,19 @@ let agentRegistry = createAgentRegistry(AGENTS_STORAGE, notificationManager);
 let messageStore = createMessageStore(MESSAGES_DIR, notificationManager);
 let instanceTracker = createInstanceTracker();
 let writeLockManager = createWriteLockManager(agentRegistry, notificationManager);
+
+export async function youSearch(query, count = 5, country = undefined, safesearch = undefined) {
+  const startTime = Date.now();
+  try {
+    const data = await callYouSearchApi({ query, count, country, safesearch });
+    const webCount = (data?.results?.web || []).length;
+    const newsCount = (data?.results?.news || []).length;
+    const message = `You.com search completed for "${query}". Found ${webCount} web and ${newsCount} news results.`;
+    return structuredResponse(data, message, createMetadata(startTime, { tool: 'you-search', query, webCount, newsCount }));
+  } catch (error) {
+    throw Errors.internalError(error.message || 'You.com search failed');
+  }
+}
 
 // Function to set push notification sender (called by server after initialization)
 export function setPushNotificationSender(sender) {

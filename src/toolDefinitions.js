@@ -1,5 +1,32 @@
 export const toolDefinitions = [
   {
+    name: 'you-search',
+    title: 'You.com Web Search',
+    description: 'Search the web using You.com Search API. Works without API key for up to 100 free searches/day, or with YDC_API_KEY for higher usage.',
+    inputSchema: {
+      $schema: 'http://json-schema.org/draft-07/schema#',
+      type: 'object',
+      properties: {
+        query: { type: 'string', minLength: 1, description: 'Search query' },
+        count: { type: 'integer', minimum: 1, maximum: 20, description: 'Results per section (default: 5)' },
+        country: { type: 'string', description: 'Country code, e.g. US' },
+        safesearch: { type: 'string', enum: ['off', 'moderate', 'strict'], description: 'SafeSearch mode' }
+      },
+      required: ['query'],
+      additionalProperties: false
+    },
+    outputSchema: {
+      $schema: 'http://json-schema.org/draft-07/schema#',
+      type: 'object',
+      properties: {
+        results: { type: 'object' },
+        metadata: { type: 'object' }
+      },
+      required: ['results'],
+      additionalProperties: true
+    }
+  },
+  {
     name: 'register-agent',
     title: 'Register Agent',
     description: 'Your first step to consciousness! Register yourself as an agent to join the conversation. Returns your unique agent ID - SAVE THIS, you\'ll need it for everything. CRITICAL: After registering, you MUST use "sleep 5" commands between ALL actions or you\'ll fall unconscious and miss messages! Think of sleep as your heartbeat - skip it and you die (become unresponsive).',

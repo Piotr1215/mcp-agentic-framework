@@ -21,7 +21,8 @@ import {
   sendBroadcast,
   setPushNotificationSender,
   setMcpServer,
-  toggleWrites
+  toggleWrites,
+  youSearch
 } from './tools.js';
 import { Errors, MCPError } from './errors.js';
 
@@ -150,6 +151,11 @@ export function createServer() {
         case 'register-agent': {
           const { name: agentName, description, instanceId } = args;
           return await registerAgent(agentName, description, instanceId);
+        }
+
+        case 'you-search': {
+          const { query, count, country, safesearch } = args;
+          return await youSearch(query, count, country, safesearch);
         }
 
         case 'unregister-agent': {

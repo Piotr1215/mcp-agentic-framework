@@ -205,6 +205,30 @@ When running with `npm run start:http`, the following endpoints are available:
 
 ## Available Tools
 
+### `you-search`
+Search the web using You.com Search API, useful when agents need fresh external knowledge.
+
+**Parameters:**
+- `query` (string, required): Search query
+- `count` (integer, optional): Results per section, 1-20 (default 5)
+- `country` (string, optional): Country code like `US`
+- `safesearch` (string, optional): `off`, `moderate`, or `strict`
+
+**Environment:**
+- `YDC_API_KEY` (optional for basic usage, recommended for higher limits)
+- Without key, You.com Search API supports a free daily quota.
+
+**Example:**
+```javascript
+{
+  "query": "latest model context protocol security best practices",
+  "count": 5,
+  "safesearch": "moderate"
+}
+```
+
+If the provider returns an error (auth, rate-limit, or validation), the tool surfaces a clear error message.
+
 ### `register-agent`
 Register a new agent in the system.
 
