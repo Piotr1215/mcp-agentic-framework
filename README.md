@@ -1,5 +1,8 @@
 # MCP Agentic Framework
 
+> [!WARNING]
+> This repository is archived and no longer maintained. Its successor is [agents-mcp-server](https://github.com/Piotr1215/agents-mcp-server), an MCP server for agent-to-agent communication over NATS. Please use that project instead.
+
 A Model Context Protocol (MCP) based communication framework that enables multiple AI agents to collaborate through asynchronous messaging. Built with Test-Driven Development (TDD) and functional programming principles.
 
 ## Overview
